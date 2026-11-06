@@ -2,7 +2,7 @@
 
 API de una plataforma de logística hecha con **Node.js**, **Express 5** (ES Modules) y **MongoDB + Mongoose**.
 
-Este proyecto junta en uno solo lo trabajado en las pre-entregas de Backend III:
+Incluye:
 
 - **Arquitectura por capas** y configuración de entorno validada.
 - **Mocking** con `@faker-js/faker` y carga de datos de prueba en MongoDB.
