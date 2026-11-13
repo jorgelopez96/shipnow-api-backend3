@@ -8,6 +8,7 @@ Incluye:
 - **Mocking** con `@faker-js/faker` y carga de datos de prueba en MongoDB.
 - **Manejo profesional de errores** con un diccionario de errores y un middleware global.
 - **Logging y monitoreo básico** con Winston (ver [Logging](#logging)).
+- **Documentación interactiva** con Swagger en `/api/docs` (ver [Documentación con Swagger](#documentación-con-swagger)).
 
 ## Instalación
 
@@ -42,6 +43,54 @@ npm run dev   # desarrollo, con nodemon
 npm start     # node server.js
 ```
 
+Con el servidor levantado, la documentación queda en `http://localhost:8080/api/docs` (o el puerto que tenga `PORT`).
+
+## Documentación con Swagger
+
+La API está documentada con **OpenAPI 3.0**: `swagger-jsdoc` arma la especificación y `swagger-ui-express` la muestra en **`/api/docs`**, desde donde se puede leer cada endpoint y probarlo con **Try it out**.
+
+### Cómo está organizada
+
+La configuración está separada de las rutas: los routers no tienen nada de Swagger.
+
+```
+src/docs/
+├── swagger.config.js  Información general (nombre, versión, descripción, servidor local), tags y archivos a leer
+├── schemas.yaml       Schemas, parámetros y respuestas de error que se reutilizan con $ref
+├── users.yaml         Users
+├── products.yaml      Products
+├── orders.yaml        Orders
+├── deliveries.yaml    Deliveries
+├── mocks.yaml         Mocks
+└── logger.yaml        Logger
+```
+
+`app.js` solo monta la ruta: `app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs))`. La URL del servidor local sale de `config.port`, así siempre coincide con el puerto real.
+
+### Qué está documentado
+
+| Tag            | Endpoints                                                                                       |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| **Users**      | `GET`/`POST /api/users`, `GET`/`PUT`/`DELETE /api/users/{id}`                                   |
+| **Products**   | `GET`/`POST /api/products`, `GET`/`PUT`/`DELETE /api/products/{id}`                             |
+| **Orders**     | `GET`/`POST /api/orders`, `GET /api/orders/{id}`, `PATCH /api/orders/{id}/status`               |
+| **Deliveries** | `GET`/`POST /api/deliveries`, `GET /api/deliveries/{id}`                                        |
+| **Mocks**      | `GET /api/mocks/mockingusers`, `/mockingorders`, `/drivers`, `/deliveries` (y sus alias), `POST /api/mocks/generateData` (y `/seed`) |
+| **Logger**     | `GET /api/loggerTest`, aclarado como herramienta de validación y no de negocio                  |
+
+Cada endpoint tiene método, ruta, descripción, parámetros de ruta y de query, body esperado con ejemplo, respuesta exitosa y cada error que puede devolver, con el código del [diccionario de errores](#diccionario-de-errores).
+
+**Schemas reutilizables:** `User`, `Product`, `Order`, `OrderItem`, `Delivery`, `SuccessResponse` y `ErrorResponse`, más los resúmenes que aparecen cuando una respuesta viene con `populate` (`CustomerSummary`, `OrderSummary`, `DriverSummary`) y `SeedCounts` para la carga de mocks. Los errores que se repiten (`InvalidId`, `InternalError`, `UserNotFound`, `OrderNotFound`, etc.) también están definidos una sola vez.
+
+### Aclaraciones para probar
+
+- **Mocks y Logger solo existen fuera de producción.** Con `NODE_ENV=production` esas rutas devuelven `404` y tampoco aparecen en Swagger, para que la documentación muestre siempre lo que la API de verdad responde.
+- **No hay autenticación**, así que no hay errores `401`/`403` documentados.
+- `details` en los errores solo aparece fuera de producción.
+- Para tener datos con los que probar, conviene empezar por `POST /api/mocks/generateData` con `{ "users": 5, "drivers": 2, "orders": 10, "deliveries": 3 }` y después usar los IDs que devuelven `GET /api/users` y `GET /api/orders`.
+- Los IDs se validan: uno con formato inválido (por ejemplo `123`) devuelve `400 INVALID_ID`, y uno con formato válido que no existe devuelve el `404` del recurso.
+- En `POST /api/orders` y `POST /api/deliveries` la respuesta trae los IDs relacionados tal cual. En los `GET` vienen populados (cliente, pedido y repartidor).
+
 ## Estructura por capas
 
 ```
@@ -59,6 +108,7 @@ src/
 ├── repositories/      Única capa que habla con Mongoose
 ├── models/            Schemas de Product, User, Order y Delivery
 ├── mocks/             Generadores de datos falsos con @faker-js/faker (locale es)
+├── docs/              Configuración de Swagger y documentación OpenAPI en YAML
 ├── errors/            Diccionario de errores y clase AppError
 ├── middlewares/       Middleware global de errores, de rutas inexistentes y de logs HTTP
 └── utils/             Hash de contraseñas, total del pedido, respuesta de éxito, selección de campos y enmascarado de la URI

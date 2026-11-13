@@ -1,0 +1,132 @@
+paths:
+  /api/deliveries:
+    get:
+      summary: Listar entregas
+      description: Cada entrega trae el pedido (estado y total) y el repartidor (nombre y rol) populados.
+      tags: [Deliveries]
+      responses:
+        "200":
+          description: Lista de entregas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Delivery'
+        "500":
+          $ref: '#/components/responses/InternalError'
+    post:
+      summary: Crear una entrega
+      description: |
+        Con `driver` la entrega queda `assigned`; sin `driver` queda `pending`.
+        La prioridad se copia del pedido. En la respuesta `order` y `driver` vienen como IDs.
+      tags: [Deliveries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order]
+              properties:
+                order:
+                  type: string
+                  description: ID de un pedido existente
+                  example: 665f4d0a8f9a1b001234abcd
+                driver:
+                  type: string
+                  description: ID de un usuario con rol `driver` y disponible (opcional)
+                  example: 665f4d0a8f9a1b001234abd0
+      responses:
+        "201":
+          description: Entrega creada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/Delivery'
+        "400":
+          description: Falta `order` (`VALIDATION_ERROR`), un ID con formato inválido (`INVALID_ID`) o body que no es JSON (`INVALID_JSON`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: El campo "order" es obligatorio
+        "404":
+          description: El pedido no existe (`ORDER_NOT_FOUND`) o el repartidor no existe o no tiene rol `driver` (`DRIVER_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                pedidoInexistente:
+                  summary: El pedido no existe
+                  value:
+                    status: error
+                    statusCode: 404
+                    error: ORDER_NOT_FOUND
+                    message: El pedido de la entrega no existe
+                repartidorInexistente:
+                  summary: El repartidor no existe
+                  value:
+                    status: error
+                    statusCode: 404
+                    error: DRIVER_NOT_FOUND
+                    message: El repartidor no existe o no tiene rol de repartidor
+        "409":
+          description: El repartidor no está disponible (`DRIVER_NOT_AVAILABLE`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                statusCode: 409
+                error: DRIVER_NOT_AVAILABLE
+                message: El repartidor no está disponible para tomar una nueva entrega
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /api/deliveries/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      summary: Obtener una entrega por ID
+      tags: [Deliveries]
+      responses:
+        "200":
+          description: Entrega encontrada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/Delivery'
+        "400":
+          $ref: '#/components/responses/InvalidId'
+        "404":
+          description: La entrega no existe (`DELIVERY_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                statusCode: 404
+                error: DELIVERY_NOT_FOUND
+                message: No se encontró la entrega solicitada
+        "500":
+          $ref: '#/components/responses/InternalError'

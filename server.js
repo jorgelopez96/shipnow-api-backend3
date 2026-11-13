@@ -19,11 +19,12 @@ const start = async () => {
   }
 
   const { default: app } = await import('./src/app.js');
-  const server = app.listen(config.port, () => {
+  // Express 5 le pasa al callback el error de listen (por ejemplo, puerto ocupado).
+  app.listen(config.port, (error) => {
+    if (error) return exitWithFatal('No se pudo levantar el servidor HTTP:', error);
     logger.info(`Servidor ShipNow escuchando en el puerto ${config.port}`);
     logger.info(`Entorno ${config.nodeEnv}, logs desde el nivel ${config.logLevel}`);
   });
-  server.on('error', (error) => exitWithFatal('No se pudo levantar el servidor HTTP:', error));
 };
 
 await start();

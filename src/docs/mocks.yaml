@@ -1,0 +1,327 @@
+paths:
+  /api/mocks/mockingusers:
+    get:
+      summary: Generar usuarios mock
+      description: |
+        Herramienta de desarrollo. Genera usuarios falsos con roles al azar **sin guardarlos** en la base.
+        No traen contraseña ni fechas. También responde en `/api/mocks/users`.
+      tags: [Mocks]
+      parameters:
+        - $ref: '#/components/parameters/mockQty'
+      responses:
+        "200":
+          description: Usuarios simulados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+        "400":
+          $ref: '#/components/responses/InvalidMockQty'
+  /api/mocks/users:
+    get:
+      summary: Generar usuarios mock (alias)
+      description: Igual que `/api/mocks/mockingusers`.
+      tags: [Mocks]
+      parameters:
+        - $ref: '#/components/parameters/mockQty'
+      responses:
+        "200":
+          description: Usuarios simulados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+        "400":
+          $ref: '#/components/responses/InvalidMockQty'
+
+  /api/mocks/drivers:
+    get:
+      summary: Generar repartidores mock
+      description: Herramienta de desarrollo. Genera usuarios con rol `driver` y disponibilidad al azar, sin guardarlos.
+      tags: [Mocks]
+      parameters:
+        - $ref: '#/components/parameters/mockQty'
+      responses:
+        "200":
+          description: Repartidores simulados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+        "400":
+          $ref: '#/components/responses/InvalidMockQty'
+
+  /api/mocks/mockingorders:
+    get:
+      summary: Generar pedidos mock
+      description: |
+        Herramienta de desarrollo. Genera pedidos falsos con 1 a 4 items, estado y prioridad al azar, **sin guardarlos**.
+        `customer` es un ID inventado. También responde en `/api/mocks/orders`.
+      tags: [Mocks]
+      parameters:
+        - $ref: '#/components/parameters/mockQty'
+      responses:
+        "200":
+          description: Pedidos simulados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+        "400":
+          $ref: '#/components/responses/InvalidMockQty'
+  /api/mocks/orders:
+    get:
+      summary: Generar pedidos mock (alias)
+      description: Igual que `/api/mocks/mockingorders`.
+      tags: [Mocks]
+      parameters:
+        - $ref: '#/components/parameters/mockQty'
+      responses:
+        "200":
+          description: Pedidos simulados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Order'
+        "400":
+          $ref: '#/components/responses/InvalidMockQty'
+
+  /api/mocks/deliveries:
+    get:
+      summary: Generar entregas mock
+      description: |
+        Herramienta de desarrollo. Genera entregas falsas (cada una con su pedido inventado), sin guardarlas.
+        Las entregas `pending` o `cancelled` no traen `driver`.
+      tags: [Mocks]
+      parameters:
+        - $ref: '#/components/parameters/mockQty'
+      responses:
+        "200":
+          description: Entregas simuladas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Delivery'
+        "400":
+          $ref: '#/components/responses/InvalidMockQty'
+
+  /api/mocks/generateData:
+    post:
+      summary: Insertar datos mock en MongoDB
+      description: |
+        Herramienta de desarrollo. Genera datos falsos y **los guarda** en la base, relacionados entre sí:
+        los pedidos usan los clientes generados y las entregas usan esos pedidos y repartidores.
+        Los usuarios se crean con la contraseña `coder123`.
+
+        Las cantidades se pasan por body, por `?qty=N` (aplica a los tipos que no vengan en el body) o combinando las dos.
+        Cada cantidad va de 0 a 100 y al menos una tiene que ser mayor a 0.
+        Para generar pedidos hace falta al menos 1 usuario, y para entregas al menos 1 pedido y 1 repartidor.
+
+        Si algo falla a mitad de la carga, se borra lo que se llegó a insertar.
+        También responde en `/api/mocks/seed`.
+      tags: [Mocks]
+      parameters:
+        - name: qty
+          in: query
+          required: false
+          description: Cantidad para los tipos que no se indiquen en el body (0 a 100)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeedCounts'
+            example:
+              users: 10
+              drivers: 3
+              orders: 20
+              deliveries: 5
+      responses:
+        "201":
+          $ref: '#/components/responses/SeedCreated'
+        "400":
+          $ref: '#/components/responses/InvalidSeedCounts'
+        "500":
+          $ref: '#/components/responses/SeedFailed'
+  /api/mocks/seed:
+    post:
+      summary: Insertar datos mock en MongoDB (alias)
+      description: Igual que `/api/mocks/generateData`.
+      tags: [Mocks]
+      parameters:
+        - name: qty
+          in: query
+          required: false
+          description: Cantidad para los tipos que no se indiquen en el body (0 a 100)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeedCounts'
+      responses:
+        "201":
+          $ref: '#/components/responses/SeedCreated'
+        "400":
+          $ref: '#/components/responses/InvalidSeedCounts'
+        "500":
+          $ref: '#/components/responses/SeedFailed'
+
+components:
+  parameters:
+    mockQty:
+      name: qty
+      in: query
+      required: false
+      description: Cantidad de registros a generar (1 a 100, por defecto 10)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+
+  schemas:
+    SeedCounts:
+      type: object
+      description: Cantidad de registros por tipo (0 a 100 cada uno)
+      properties:
+        users:
+          type: integer
+          description: Clientes (rol `customer`)
+          example: 10
+        drivers:
+          type: integer
+          description: Repartidores (rol `driver`)
+          example: 3
+        orders:
+          type: integer
+          example: 20
+        deliveries:
+          type: integer
+          example: 5
+
+  responses:
+    InvalidMockQty:
+      description: |
+        `qty` no es un entero, es 0 o negativo (`INVALID_MOCK_AMOUNT`), o supera 100 (`MOCK_LIMIT_EXCEEDED`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            noEsEntero:
+              summary: qty no es un entero
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_MOCK_AMOUNT
+                message: '"qty" debe ser un número entero'
+            superaLimite:
+              summary: qty mayor a 100
+              value:
+                status: error
+                statusCode: 400
+                error: MOCK_LIMIT_EXCEEDED
+                message: '"qty" no puede ser mayor a 100'
+    SeedCreated:
+      description: Datos insertados. Devuelve cuántos registros se guardaron de cada tipo.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/SuccessResponse'
+              - properties:
+                  payload:
+                    $ref: '#/components/schemas/SeedCounts'
+    InvalidSeedCounts:
+      description: |
+        Cantidad que no es entera o es negativa, o todas en 0 (`INVALID_MOCK_AMOUNT`), cantidad mayor a 100 (`MOCK_LIMIT_EXCEEDED`),
+        pedidos sin usuarios o entregas sin pedidos o repartidores (`MOCK_DEPENDENCIES_MISSING`), o body que no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            todoEnCero:
+              summary: No se pidió nada
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_MOCK_AMOUNT
+                message: Indicá al menos una cantidad mayor a 0 (?qty=N o body { users, drivers, orders, deliveries })
+            negativo:
+              summary: Cantidad negativa
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_MOCK_AMOUNT
+                message: '"users" no puede ser negativo'
+            superaLimite:
+              summary: Cantidad mayor a 100
+              value:
+                status: error
+                statusCode: 400
+                error: MOCK_LIMIT_EXCEEDED
+                message: '"orders" no puede ser mayor a 100'
+            faltanDependencias:
+              summary: Pedidos sin usuarios
+              value:
+                status: error
+                statusCode: 400
+                error: MOCK_DEPENDENCIES_MISSING
+                message: Para generar pedidos hace falta generar al menos un usuario (cliente)
+    SeedFailed:
+      description: Falló la carga en la base y se deshizo lo insertado (`MOCK_GENERATION_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 500
+            error: MOCK_GENERATION_ERROR
+            message: No se pudieron cargar los datos de prueba en la base

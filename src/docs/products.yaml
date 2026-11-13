@@ -1,0 +1,175 @@
+paths:
+  /api/products:
+    get:
+      summary: Listar productos disponibles
+      description: Solo devuelve productos con stock (`status = available`), del más nuevo al más viejo.
+      tags: [Products]
+      responses:
+        "200":
+          description: Lista de productos disponibles
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Product'
+        "500":
+          $ref: '#/components/responses/InternalError'
+    post:
+      summary: Crear un producto
+      description: El `status` lo calcula la API según el stock. El `code` tiene que ser único.
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ProductInput'
+                - required: [title, description, code, price, stock, category]
+      responses:
+        "201":
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        "400":
+          $ref: '#/components/responses/InvalidData'
+        "409":
+          $ref: '#/components/responses/DuplicateProductCode'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /api/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      summary: Obtener un producto por ID
+      tags: [Products]
+      responses:
+        "200":
+          description: Producto encontrado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        "400":
+          $ref: '#/components/responses/InvalidId'
+        "404":
+          description: El producto no existe (`PRODUCT_NOT_FOUND`) o no tiene stock (`PRODUCT_OUT_OF_STOCK`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noExiste:
+                  summary: No existe
+                  value:
+                    status: error
+                    statusCode: 404
+                    error: PRODUCT_NOT_FOUND
+                    message: No se encontró el producto solicitado
+                sinStock:
+                  summary: Sin stock
+                  value:
+                    status: error
+                    statusCode: 404
+                    error: PRODUCT_OUT_OF_STOCK
+                    message: El producto solicitado no tiene stock
+        "500":
+          $ref: '#/components/responses/InternalError'
+    put:
+      summary: Actualizar un producto
+      description: Se pueden mandar solo los campos a cambiar. Si cambia el stock, se recalcula el `status`.
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+            example:
+              stock: 0
+      responses:
+        "200":
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        "400":
+          description: ID inválido (`INVALID_ID`), datos inválidos (`VALIDATION_ERROR`) o body que no es JSON (`INVALID_JSON`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          $ref: '#/components/responses/ProductNotFound'
+        "409":
+          $ref: '#/components/responses/DuplicateProductCode'
+        "500":
+          $ref: '#/components/responses/InternalError'
+    delete:
+      summary: Eliminar un producto
+      description: Devuelve el producto eliminado.
+      tags: [Products]
+      responses:
+        "200":
+          description: Producto eliminado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/Product'
+        "400":
+          $ref: '#/components/responses/InvalidId'
+        "404":
+          $ref: '#/components/responses/ProductNotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+components:
+  responses:
+    ProductNotFound:
+      description: El producto no existe (`PRODUCT_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 404
+            error: PRODUCT_NOT_FOUND
+            message: No se encontró el producto solicitado
+    DuplicateProductCode:
+      description: Ya existe un producto con ese `code` (`DUPLICATE_VALUE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 409
+            error: DUPLICATE_VALUE
+            message: Ya existe un registro con ese valor
+            details: 'Campos: code'

@@ -1,5 +1,7 @@
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
 import { config } from './config/index.js';
+import { swaggerSpecs } from './docs/swagger.config.js';
 import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
 import { httpLogger } from './middlewares/http-logger.middleware.js';
 import deliveriesRouter from './routes/deliveries.router.js';
@@ -13,6 +15,8 @@ const app = express();
 
 app.use(httpLogger);
 app.use(express.json());
+
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
 app.use('/api/products', productsRouter);
 app.use('/api/users', usersRouter);

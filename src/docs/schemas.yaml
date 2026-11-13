@@ -1,0 +1,334 @@
+components:
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      description: ID de MongoDB (24 caracteres hexadecimales)
+      schema:
+        type: string
+        example: 665f4d0a8f9a1b001234abcd
+
+  schemas:
+    SuccessResponse:
+      type: object
+      description: Forma de toda respuesta exitosa. El contenido de `payload` depende del endpoint.
+      properties:
+        status:
+          type: string
+          example: success
+        payload:
+          description: Datos devueltos por el endpoint
+
+    ErrorResponse:
+      type: object
+      description: Forma de toda respuesta de error, armada por el middleware global de errores.
+      properties:
+        status:
+          type: string
+          example: error
+        statusCode:
+          type: integer
+          example: 404
+        error:
+          type: string
+          description: Código del diccionario de errores
+          example: ORDER_NOT_FOUND
+        message:
+          type: string
+          example: No se encontró el pedido solicitado
+        details:
+          type: string
+          description: Información extra para depurar. Solo se envía fuera de producción.
+          example: 'Valor recibido en "_id": 123'
+
+    User:
+      type: object
+      description: Usuario. La contraseña nunca se devuelve.
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abce
+        firstName:
+          type: string
+          example: Lucía
+        lastName:
+          type: string
+          example: Fernández
+        email:
+          type: string
+          format: email
+          example: lucia.fernandez@shipnow.test
+        role:
+          type: string
+          enum: [admin, customer, driver, store]
+          example: customer
+        isAvailable:
+          type: boolean
+          description: Solo tiene sentido en repartidores (`driver`). Si es `false`, no puede tomar entregas.
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserInput:
+      type: object
+      properties:
+        firstName:
+          type: string
+          example: Lucía
+        lastName:
+          type: string
+          example: Fernández
+        email:
+          type: string
+          format: email
+          example: lucia.fernandez@shipnow.test
+        password:
+          type: string
+          format: password
+          description: Se guarda hasheada con bcrypt
+          example: coder123
+        role:
+          type: string
+          enum: [admin, customer, driver, store]
+          default: customer
+        isAvailable:
+          type: boolean
+          example: true
+
+    Product:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abcf
+        title:
+          type: string
+          example: Caja mediana
+        description:
+          type: string
+          example: Caja de cartón corrugado 40x30x30
+        code:
+          type: string
+          description: Único por producto
+          example: CAJA-M-01
+        price:
+          type: number
+          example: 1500
+        stock:
+          type: integer
+          example: 20
+        category:
+          type: string
+          example: embalaje
+        status:
+          type: string
+          enum: [available, out_of_stock]
+          description: Lo calcula la API según el stock
+          example: available
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProductInput:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Caja mediana
+        description:
+          type: string
+          example: Caja de cartón corrugado 40x30x30
+        code:
+          type: string
+          example: CAJA-M-01
+        price:
+          type: number
+          minimum: 0
+          example: 1500
+        stock:
+          type: integer
+          minimum: 0
+          example: 20
+        category:
+          type: string
+          example: embalaje
+
+    OrderItem:
+      type: object
+      required: [name, quantity, price]
+      properties:
+        name:
+          type: string
+          example: Paquete mediano
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        price:
+          type: number
+          minimum: 0
+          example: 1500
+
+    CustomerSummary:
+      type: object
+      description: Cliente populado dentro de un pedido
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abce
+        firstName:
+          type: string
+          example: Lucía
+        lastName:
+          type: string
+          example: Fernández
+        email:
+          type: string
+          example: lucia.fernandez@shipnow.test
+
+    Order:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abcd
+        customer:
+          description: ID del cliente. En las consultas y al cambiar el estado viene populado con nombre y email.
+          oneOf:
+            - type: string
+              example: 665f4d0a8f9a1b001234abce
+            - $ref: '#/components/schemas/CustomerSummary'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        deliveryAddress:
+          type: string
+          example: Av. Siempre Viva 742
+        total:
+          type: number
+          description: Lo calcula la API (suma de quantity × price)
+          example: 3000
+        status:
+          type: string
+          enum: [created, assigned, picked_up, in_transit, delivered, cancelled]
+          example: created
+        priority:
+          type: string
+          enum: [low, normal, high]
+          example: normal
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    OrderSummary:
+      type: object
+      description: Pedido populado dentro de una entrega
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abcd
+        status:
+          type: string
+          example: created
+        total:
+          type: number
+          example: 3000
+
+    DriverSummary:
+      type: object
+      description: Repartidor populado dentro de una entrega
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abd0
+        firstName:
+          type: string
+          example: Martín
+        lastName:
+          type: string
+          example: Gómez
+        role:
+          type: string
+          example: driver
+
+    Delivery:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 665f4d0a8f9a1b001234abd1
+        order:
+          description: ID del pedido. En las consultas viene populado con estado y total.
+          oneOf:
+            - type: string
+              example: 665f4d0a8f9a1b001234abcd
+            - $ref: '#/components/schemas/OrderSummary'
+        driver:
+          description: ID del repartidor (no viene si la entrega está pendiente). En las consultas viene populado.
+          oneOf:
+            - type: string
+              example: 665f4d0a8f9a1b001234abd0
+            - $ref: '#/components/schemas/DriverSummary'
+        status:
+          type: string
+          enum: [pending, assigned, picked_up, in_transit, delivered, cancelled]
+          example: assigned
+        priority:
+          type: string
+          enum: [low, normal, high]
+          description: Se copia de la prioridad del pedido
+          example: normal
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+  responses:
+    InvalidData:
+      description: Datos inválidos (`VALIDATION_ERROR`) o body que no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 400
+            error: VALIDATION_ERROR
+            message: El campo "firstName" es obligatorio
+    InvalidId:
+      description: El ID no tiene formato de ObjectId (`INVALID_ID`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 400
+            error: INVALID_ID
+            message: El ID enviado no tiene un formato válido
+            details: 'Valor recibido en "_id": 123'
+    InternalError:
+      description: Error interno (`INTERNAL_SERVER_ERROR`) o de base de datos (`DATABASE_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 500
+            error: INTERNAL_SERVER_ERROR
+            message: Error interno del servidor

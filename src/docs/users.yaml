@@ -1,0 +1,180 @@
+paths:
+  /api/users:
+    get:
+      summary: Listar usuarios
+      tags: [Users]
+      responses:
+        "200":
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/User'
+        "500":
+          $ref: '#/components/responses/InternalError'
+    post:
+      summary: Crear un usuario
+      description: El email tiene que ser único. La contraseña se guarda hasheada y no se devuelve.
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/UserInput'
+                - required: [firstName, lastName, email, password]
+      responses:
+        "201":
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        "400":
+          description: Falta la contraseña (`PASSWORD_REQUIRED`), faltan campos o el rol no existe (`VALIDATION_ERROR`), o el body no es JSON (`INVALID_JSON`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                sinPassword:
+                  summary: Falta la contraseña
+                  value:
+                    status: error
+                    statusCode: 400
+                    error: PASSWORD_REQUIRED
+                    message: La contraseña es obligatoria
+                datosInvalidos:
+                  summary: Falta un campo obligatorio
+                  value:
+                    status: error
+                    statusCode: 400
+                    error: VALIDATION_ERROR
+                    message: El campo "lastName" es obligatorio
+        "409":
+          description: Ya existe un usuario con ese email (`USER_ALREADY_EXISTS`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                statusCode: 409
+                error: USER_ALREADY_EXISTS
+                message: Ya existe un usuario con ese email
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /api/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      summary: Obtener un usuario por ID
+      tags: [Users]
+      responses:
+        "200":
+          description: Usuario encontrado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        "400":
+          $ref: '#/components/responses/InvalidId'
+        "404":
+          $ref: '#/components/responses/UserNotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+    put:
+      summary: Actualizar un usuario
+      description: Se pueden mandar solo los campos a cambiar. Si se cambia el email, tiene que seguir siendo único.
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+            example:
+              isAvailable: false
+      responses:
+        "200":
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        "400":
+          description: ID inválido (`INVALID_ID`), contraseña vacía (`PASSWORD_REQUIRED`), datos inválidos (`VALIDATION_ERROR`) o body que no es JSON (`INVALID_JSON`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: '"superuser" no es un valor válido para "role"'
+        "404":
+          $ref: '#/components/responses/UserNotFound'
+        "409":
+          description: El email ya lo usa otro usuario (`USER_ALREADY_EXISTS`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          $ref: '#/components/responses/InternalError'
+    delete:
+      summary: Eliminar un usuario
+      description: Devuelve el usuario eliminado.
+      tags: [Users]
+      responses:
+        "200":
+          description: Usuario eliminado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        $ref: '#/components/schemas/User'
+        "400":
+          $ref: '#/components/responses/InvalidId'
+        "404":
+          $ref: '#/components/responses/UserNotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+components:
+  responses:
+    UserNotFound:
+      description: El usuario no existe (`USER_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 404
+            error: USER_NOT_FOUND
+            message: El usuario solicitado no existe

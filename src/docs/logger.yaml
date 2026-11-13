@@ -1,0 +1,25 @@
+paths:
+  /api/loggerTest:
+    get:
+      summary: Probar los niveles del logger
+      description: |
+        **Herramienta de validación, no es una funcionalidad de negocio.**
+        Escribe un mensaje de cada nivel (debug, http, info, warning, error y fatal) para revisar
+        qué niveles se muestran en consola y cuáles llegan al archivo `logs/error-<fecha>.log` (solo error y fatal).
+        Solo existe fuera de producción.
+      tags: [Logger]
+      responses:
+        "200":
+          description: Logs generados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: object
+                        properties:
+                          message:
+                            type: string
+                            example: Logs generados correctamente
