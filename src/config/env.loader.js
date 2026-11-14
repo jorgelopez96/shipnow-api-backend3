@@ -1,9 +1,10 @@
 import dotenv from 'dotenv';
 import { LOG_LEVEL_NAMES } from '../logger/levels.js';
 
-dotenv.config({ quiet: true });
+// Los tests (npm test) corren con NODE_ENV=test y leen su propio archivo, con otra base de datos.
+dotenv.config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env', quiet: true });
 
-const NODE_ENVS = ['development', 'production'];
+const NODE_ENVS = ['development', 'production', 'test'];
 const DEFAULT_PORT = 8080;
 
 const { MONGODB_URI, NODE_ENV, PORT, LOG_LEVEL } = process.env;
@@ -28,7 +29,8 @@ const readLogLevel = () => {
 if (!MONGODB_URI) envErrors.push('falta MONGODB_URI');
 if (!NODE_ENV) envErrors.push('falta NODE_ENV');
 if (NODE_ENV && !NODE_ENVS.includes(NODE_ENV)) {
-  envErrors.push(`NODE_ENV debe ser ${NODE_ENVS.join(' o ')} (llegó "${NODE_ENV}")`);
+  const options = new Intl.ListFormat('es', { type: 'disjunction' }).format(NODE_ENVS);
+  envErrors.push(`NODE_ENV debe ser ${options} (llegó "${NODE_ENV}")`);
 }
 
 export const env = Object.freeze({
@@ -36,6 +38,7 @@ export const env = Object.freeze({
   mongoUri: MONGODB_URI,
   nodeEnv: NODE_ENV,
   isProduction: NODE_ENV === 'production',
+  isTest: NODE_ENV === 'test',
   logLevel: readLogLevel(),
 });
 

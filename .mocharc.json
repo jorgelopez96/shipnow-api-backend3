@@ -1,0 +1,6 @@
+{
+  "node-option": ["env-file=.env.test"],
+  "require": ["tests/setup.js"],
+  "spec": ["tests/**/*.test.js"],
+  "timeout": 10000
+}
