@@ -2,27 +2,24 @@ paths:
   /api/orders:
     get:
       summary: Listar pedidos
-      description: Cada pedido trae el cliente populado (nombre, apellido y email).
+      description: |
+        Devuelve todos los pedidos con su estado, prioridad, items, total y comprobante de entrega (si tienen).
+        Cada pedido trae el cliente populado (nombre, apellido y email) para no tener que buscarlo aparte.
       tags: [Orders]
       responses:
         "200":
-          description: Lista de pedidos
+          description: Lista de pedidos (vacía si no hay ninguno)
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/OrderListResponse'
         "500":
           $ref: '#/components/responses/InternalError'
     post:
       summary: Crear un pedido
       description: |
-        El `total` lo calcula la API con los items. El pedido arranca en estado `created`.
+        Registra un pedido de un cliente existente. El pedido arranca en estado `created` y con prioridad `normal` si no se indica otra.
+        El `total` no se manda: lo calcula la API sumando `quantity × price` de cada item.
         En la respuesta `customer` viene como ID (sin popular).
       tags: [Orders]
       requestBody:
@@ -51,50 +48,15 @@ paths:
                   default: normal
       responses:
         "201":
-          description: Pedido creado
+          description: Pedido creado, con el total calculado
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/OrderResponse'
         "400":
-          description: |
-            Sin items (`ORDER_ITEMS_REQUIRED`), `customer` con formato inválido (`INVALID_ID`),
-            falta `deliveryAddress`, un item está mal o la prioridad no existe (`VALIDATION_ERROR`),
-            o el body no es JSON (`INVALID_JSON`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                sinItems:
-                  summary: Sin items
-                  value:
-                    status: error
-                    statusCode: 400
-                    error: ORDER_ITEMS_REQUIRED
-                    message: El pedido debe incluir al menos un item
-                sinDireccion:
-                  summary: Falta la dirección
-                  value:
-                    status: error
-                    statusCode: 400
-                    error: VALIDATION_ERROR
-                    message: El campo "deliveryAddress" es obligatorio
+          $ref: '#/components/responses/InvalidOrderData'
         "404":
-          description: Falta `customer` o el usuario no existe (`USER_NOT_FOUND`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 404
-                error: USER_NOT_FOUND
-                message: No se encontró el usuario indicado para crear el pedido
+          $ref: '#/components/responses/CustomerNotFound'
         "500":
           $ref: '#/components/responses/InternalError'
 
@@ -103,6 +65,10 @@ paths:
       - $ref: '#/components/parameters/id'
     get:
       summary: Obtener un pedido por ID
+      description: |
+        Devuelve el detalle de un pedido: items, total, dirección de entrega, estado, prioridad,
+        el cliente populado (nombre, apellido y email) y el comprobante de entrega si ya se cargó.
+        Sirve para seguir en qué estado está un pedido puntual.
       tags: [Orders]
       responses:
         "200":
@@ -110,11 +76,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/OrderResponse'
         "400":
           $ref: '#/components/responses/InvalidId'
         "404":
@@ -127,7 +89,10 @@ paths:
       - $ref: '#/components/parameters/id'
     patch:
       summary: Cambiar el estado de un pedido
-      description: Un pedido entregado (`delivered`) o cancelado (`cancelled`) ya no puede cambiar de estado.
+      description: |
+        Avanza (o cancela) un pedido: `created`, `assigned`, `picked_up`, `in_transit`, `delivered` o `cancelled`.
+        Un pedido entregado (`delivered`) o cancelado (`cancelled`) queda cerrado y ya no puede cambiar de estado.
+        Devuelve el pedido con el cliente populado.
       tags: [Orders]
       requestBody:
         required: true
@@ -147,39 +112,58 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/OrderResponse'
         "400":
-          description: Estado inexistente o faltante (`INVALID_ORDER_STATUS`), ID inválido (`INVALID_ID`) o body que no es JSON (`INVALID_JSON`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 400
-                error: INVALID_ORDER_STATUS
-                message: El estado indicado no es válido para un pedido
-                details: 'Estados válidos: created, assigned, picked_up, in_transit, delivered, cancelled'
+          $ref: '#/components/responses/InvalidOrderStatus'
         "404":
           $ref: '#/components/responses/OrderNotFound'
         "409":
-          description: El pedido ya está cerrado (`ORDER_ALREADY_CLOSED`)
+          $ref: '#/components/responses/OrderAlreadyClosed'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /api/orders/{id}/proof:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      summary: Subir el comprobante de entrega de un pedido
+      description: |
+        Recibe un archivo por `multipart/form-data` en el campo **`proof`** (foto del paquete, remito firmado, etc.) y lo asocia al pedido.
+
+        - Tipos de archivo: PDF, JPEG, PNG o WEBP. Tamaño máximo: **5 MB**. Un solo archivo por petición.
+        - El archivo se guarda en `uploads/proofs` y sus metadatos quedan en `proof` con tipo `delivery_proof`.
+        - Cada pedido tiene un solo comprobante: si se sube otro, reemplaza al anterior y el archivo viejo se borra.
+        - No cambia el estado del pedido.
+      tags: [Orders]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [proof]
+              properties:
+                proof:
+                  type: string
+                  format: binary
+                  description: Archivo PDF, JPEG, PNG o WEBP de hasta 5 MB
+      responses:
+        "200":
+          description: Comprobante cargado. Devuelve el pedido actualizado con el cliente populado.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 409
-                error: ORDER_ALREADY_CLOSED
-                message: El pedido ya fue entregado o cancelado y no puede cambiar de estado
-                details: 'Estado actual: delivered'
+                $ref: '#/components/schemas/OrderResponse'
+        "400":
+          $ref: '#/components/responses/InvalidProofUpload'
+        "404":
+          $ref: '#/components/responses/OrderNotFound'
+        "413":
+          $ref: '#/components/responses/FileTooLarge'
+        "415":
+          $ref: '#/components/responses/InvalidFileType'
         "500":
-          $ref: '#/components/responses/InternalError'
+          $ref: '#/components/responses/UploadError'
 
 components:
   responses:
@@ -194,3 +178,101 @@ components:
             statusCode: 404
             error: ORDER_NOT_FOUND
             message: No se encontró el pedido solicitado
+    CustomerNotFound:
+      description: Falta `customer` o el usuario indicado no existe (`USER_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 404
+            error: USER_NOT_FOUND
+            message: No se encontró el usuario indicado para crear el pedido
+    InvalidOrderData:
+      description: |
+        Sin items (`ORDER_ITEMS_REQUIRED`), `customer` con formato inválido (`INVALID_ID`),
+        falta `deliveryAddress`, un item está mal o la prioridad no existe (`VALIDATION_ERROR`),
+        o el body no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            sinItems:
+              summary: Sin items
+              value:
+                status: error
+                statusCode: 400
+                error: ORDER_ITEMS_REQUIRED
+                message: El pedido debe incluir al menos un item
+            sinDireccion:
+              summary: Falta la dirección
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: El campo "deliveryAddress" es obligatorio
+            prioridadInvalida:
+              summary: La prioridad no existe
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: '"urgente" no es un valor válido para "priority"'
+            clienteInvalido:
+              summary: customer con formato inválido
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_ID
+                message: El ID enviado no tiene un formato válido
+                details: 'Valor recibido en "_id": 123'
+    InvalidOrderStatus:
+      description: Estado inexistente o faltante (`INVALID_ORDER_STATUS`), ID inválido (`INVALID_ID`) o body que no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 400
+            error: INVALID_ORDER_STATUS
+            message: El estado indicado no es válido para un pedido
+            details: 'Estados válidos: created, assigned, picked_up, in_transit, delivered, cancelled'
+    OrderAlreadyClosed:
+      description: El pedido ya fue entregado o cancelado (`ORDER_ALREADY_CLOSED`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 409
+            error: ORDER_ALREADY_CLOSED
+            message: El pedido ya fue entregado o cancelado y no puede cambiar de estado
+            details: 'Estado actual: delivered'
+    InvalidProofUpload:
+      description: |
+        Falta el archivo (`FILE_REQUIRED`), llegó en otro campo o más de uno (`UNEXPECTED_FILE_FIELD`),
+        ID inválido (`INVALID_ID`) o formulario mal armado (`VALIDATION_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            sinArchivo:
+              summary: Falta el archivo
+              value:
+                status: error
+                statusCode: 400
+                error: FILE_REQUIRED
+                message: Falta el archivo a subir
+            otroCampo:
+              summary: El archivo llegó en otro campo
+              value:
+                status: error
+                statusCode: 400
+                error: UNEXPECTED_FILE_FIELD
+                message: El archivo se envió en un campo distinto al esperado
+                details: Se espera un solo archivo en el campo "proof"

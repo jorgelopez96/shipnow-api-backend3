@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 import { DELIVERY_PRIORITY, ORDER_STATUS } from '../constants/index.js';
+import { fileSchema } from './file.schema.js';
 
 const itemSchema = new Schema(
   {
@@ -21,6 +22,7 @@ const orderSchema = new Schema(
     total: { type: Number, required: true, min: 0 },
     status: { type: String, enum: Object.values(ORDER_STATUS), default: ORDER_STATUS.CREATED },
     priority: { type: String, enum: Object.values(DELIVERY_PRIORITY), default: DELIVERY_PRIORITY.NORMAL },
+    proof: { type: fileSchema },
   },
   { timestamps: true }
 );

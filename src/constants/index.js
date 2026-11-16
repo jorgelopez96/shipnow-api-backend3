@@ -51,6 +51,17 @@ export const DOCUMENT_TYPES = {
   DELIVERY_PROOF: 'delivery_proof',
 };
 
+export const USER_DOCUMENT_TYPES = [DOCUMENT_TYPES.USER_DOCUMENT, DOCUMENT_TYPES.DRIVER_LICENSE];
+
+// Subcarpeta de uploads/ donde queda cada tipo de documento.
+export const DOCUMENT_FOLDERS = {
+  [DOCUMENT_TYPES.USER_DOCUMENT]: 'documents',
+  [DOCUMENT_TYPES.DRIVER_LICENSE]: 'licenses',
+  [DOCUMENT_TYPES.DELIVERY_PROOF]: 'proofs',
+};
+
+export const MAX_UPLOAD_SIZE_MB = 5;
+
 export const MAX_MOCK_ITEMS = 100;
 export const DEFAULT_MOCK_QTY = 10;
 export const MOCK_USER_PASSWORD = 'coder123';

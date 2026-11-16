@@ -40,6 +40,8 @@ export const env = Object.freeze({
   isProduction: NODE_ENV === 'production',
   isTest: NODE_ENV === 'test',
   logLevel: readLogLevel(),
+  // Los tests suben archivos a otra carpeta, que se borra al terminar la suite.
+  uploadsDir: NODE_ENV === 'test' ? 'uploads-test' : 'uploads',
 });
 
 export { envErrors };

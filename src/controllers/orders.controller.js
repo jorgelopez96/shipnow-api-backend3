@@ -33,4 +33,12 @@ export const ordersController = {
       next(error);
     }
   },
+
+  async addProof(req, res, next) {
+    try {
+      sendSuccess(res, await ordersService.addProof(req.params.id, req.file));
+    } catch (error) {
+      next(error);
+    }
+  },
 };

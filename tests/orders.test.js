@@ -2,8 +2,22 @@ import { expect } from 'chai';
 import request from 'supertest';
 import app from '../src/app.js';
 import { ORDER_STATUS } from '../src/constants/index.js';
+import { config } from '../src/config/index.js';
 import { OrderModel } from '../src/models/order.model.js';
-import { createOrder, createUser, expectError, expectSuccess, INVALID_ID, newId, ORDER_ITEMS, ORDER_ITEMS_TOTAL } from './helpers.js';
+import {
+  createOrder,
+  createUser,
+  expectError,
+  expectSuccess,
+  fileExists,
+  filesIn,
+  INVALID_ID,
+  newId,
+  ORDER_ITEMS,
+  ORDER_ITEMS_TOTAL,
+  PDF_FILE,
+  PNG_FILE,
+} from './helpers.js';
 
 const VALID_STATUSES = `Estados válidos: ${Object.values(ORDER_STATUS).join(', ')}`;
 
@@ -163,6 +177,66 @@ describe('Orders API', () => {
     it('debería responder 400 INVALID_ID si el ID no tiene formato válido', async () => {
       const res = await request(app).patch(`/api/orders/${INVALID_ID}/status`).send({ status: 'assigned' });
       expectError(res, 400, 'INVALID_ID');
+    });
+  });
+
+  describe('POST /api/orders/:id/proof', () => {
+    const upload = (id) => request(app).post(`/api/orders/${id}/proof`);
+
+    const expectNoFilesLeft = async () => {
+      expect(await filesIn('tmp')).to.deep.equal([]);
+      expect(await filesIn('proofs')).to.deep.equal([]);
+    };
+
+    it('debería guardar el comprobante en uploads/proofs y asociarlo al pedido', async () => {
+      const created = await createOrder(customer._id);
+      const order = expectSuccess(await upload(created._id).attach('proof', PNG_FILE, 'entrega.png'));
+
+      expect(order).to.include({ _id: String(created._id), status: created.status });
+      expect(order.customer).to.include({ _id: String(customer._id), email: customer.email });
+      expect(order.proof).to.have.all.keys('originalName', 'fileName', 'path', 'mimeType', 'size', 'type', 'uploadedAt');
+      expect(order.proof).to.include({ originalName: 'entrega.png', mimeType: 'image/png', size: PNG_FILE.length, type: 'delivery_proof' });
+      expect(order.proof.path).to.equal(`${config.uploadsDir}/proofs/${order.proof.fileName}`);
+      expect(await fileExists(order.proof.path)).to.equal(true);
+      expect((await OrderModel.findById(created._id)).proof.fileName).to.equal(order.proof.fileName);
+    });
+
+    it('debería reemplazar el comprobante anterior y borrar su archivo', async () => {
+      const created = await createOrder(customer._id);
+      const first = expectSuccess(await upload(created._id).attach('proof', PNG_FILE, 'entrega.png')).proof;
+      const second = expectSuccess(await upload(created._id).attach('proof', PDF_FILE, 'remito.pdf')).proof;
+
+      expect(second).to.include({ originalName: 'remito.pdf', mimeType: 'application/pdf' });
+      expect(await fileExists(first.path)).to.equal(false);
+      expect(await filesIn('proofs')).to.deep.equal([second.fileName]);
+    });
+
+    it('debería responder 400 FILE_REQUIRED si no se envía el comprobante', async () => {
+      const created = await createOrder(customer._id);
+      expectError(await upload(created._id).field('nota', 'sin archivo'), 400, 'FILE_REQUIRED');
+    });
+
+    it('debería responder 400 UNEXPECTED_FILE_FIELD si el archivo llega en el campo document', async () => {
+      const created = await createOrder(customer._id);
+      const res = await upload(created._id).attach('document', PNG_FILE, 'entrega.png');
+      expect(expectError(res, 400, 'UNEXPECTED_FILE_FIELD').details).to.equal('Se espera un solo archivo en el campo "proof"');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 415 INVALID_FILE_TYPE si el tipo de archivo no está permitido', async () => {
+      const created = await createOrder(customer._id);
+      expectError(await upload(created._id).attach('proof', Buffer.from('<svg/>'), 'firma.svg'), 415, 'INVALID_FILE_TYPE');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 404 ORDER_NOT_FOUND si el pedido no existe y no dejar el archivo', async () => {
+      expectError(await upload(newId()).attach('proof', PNG_FILE, 'entrega.png'), 404, 'ORDER_NOT_FOUND');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 400 INVALID_ID si el ID no tiene formato válido', async () => {
+      expectError(await upload(INVALID_ID).attach('proof', PNG_FILE, 'entrega.png'), 400, 'INVALID_ID');
+      await expectNoFilesLeft();
     });
   });
 });

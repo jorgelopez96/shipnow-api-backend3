@@ -4,3 +4,5 @@ node_modules
 logs/*
 !logs/.gitkeep
 *.log
+uploads/
+uploads-test/

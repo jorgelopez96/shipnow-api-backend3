@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import mongoose from 'mongoose';
 import { config } from '../src/config/index.js';
 import { connectMongo } from '../src/database/mongo-connection.js';
@@ -7,6 +8,7 @@ export const mochaHooks = {
   async beforeAll() {
     if (!config.isTest) throw new Error('Los tests tienen que correr con NODE_ENV=test (usá npm test).');
 
+    await rm(config.uploadsDir, { recursive: true, force: true });
     await connectMongo(config.mongoUri);
 
     // Cada test vacía la base: si no es una base de test, se corta antes de borrar nada.
@@ -20,12 +22,14 @@ export const mochaHooks = {
     await Promise.all(Object.values(mongoose.models).map((model) => model.init()));
   },
 
-  // Cada test arranca con la base vacía y crea sus propios datos: no dependen del orden ni de corridas anteriores.
+  // Cada test arranca con la base y la carpeta de uploads vacías, y crea sus propios datos: no dependen del orden ni de corridas anteriores.
   async beforeEach() {
     await Promise.all(Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})));
+    await rm(config.uploadsDir, { recursive: true, force: true });
   },
 
   async afterAll() {
+    await rm(config.uploadsDir, { recursive: true, force: true });
     if (mongoose.connection.readyState !== 1) return;
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();

@@ -67,6 +67,11 @@ components:
           type: boolean
           description: Solo tiene sentido en repartidores (`driver`). Si es `false`, no puede tomar entregas.
           example: true
+        documents:
+          type: array
+          description: Documentos cargados con `POST /api/users/{id}/documents`
+          items:
+            $ref: '#/components/schemas/StoredFile'
         createdAt:
           type: string
           format: date-time
@@ -225,6 +230,9 @@ components:
           type: string
           enum: [low, normal, high]
           example: normal
+        proof:
+          $ref: '#/components/schemas/StoredFile'
+          description: Comprobante de entrega cargado con `POST /api/orders/{id}/proof`. No viene si todavía no se cargó.
         createdAt:
           type: string
           format: date-time
@@ -297,18 +305,198 @@ components:
           type: string
           format: date-time
 
+    StoredFile:
+      type: object
+      description: |
+        Metadatos de un archivo subido. El archivo se guarda en una carpeta del servidor
+        (`uploads/documents`, `uploads/licenses` o `uploads/proofs` según el tipo); en la base solo quedan estos datos.
+      properties:
+        originalName:
+          type: string
+          description: Nombre con el que lo mandó el cliente
+          example: dni.pdf
+        fileName:
+          type: string
+          description: Nombre único que genera el servidor. La extensión sale del tipo de archivo.
+          example: 1794626585667-238c81e3-982c-42ad-b8d8-c30b5ccda424.pdf
+        path:
+          type: string
+          example: uploads/documents/1794626585667-238c81e3-982c-42ad-b8d8-c30b5ccda424.pdf
+        mimeType:
+          type: string
+          enum: [application/pdf, image/jpeg, image/png, image/webp]
+          example: application/pdf
+        size:
+          type: integer
+          description: Tamaño en bytes
+          example: 24533
+        type:
+          type: string
+          enum: [user_document, driver_license, delivery_proof]
+          example: user_document
+        uploadedAt:
+          type: string
+          format: date-time
+
+    # Respuestas exitosas: SuccessResponse con el payload de cada recurso.
+    UserResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              $ref: '#/components/schemas/User'
+    UserListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+    ProductResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              $ref: '#/components/schemas/Product'
+    ProductListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              type: array
+              items:
+                $ref: '#/components/schemas/Product'
+    OrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              $ref: '#/components/schemas/Order'
+    OrderListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              type: array
+              items:
+                $ref: '#/components/schemas/Order'
+    DeliveryResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              $ref: '#/components/schemas/Delivery'
+    DeliveryListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - properties:
+            payload:
+              type: array
+              items:
+                $ref: '#/components/schemas/Delivery'
+
   responses:
-    InvalidData:
-      description: Datos inválidos (`VALIDATION_ERROR`) o body que no es JSON (`INVALID_JSON`)
+    FileTooLarge:
+      description: El archivo pesa más de 5 MB (`FILE_TOO_LARGE`)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             status: error
-            statusCode: 400
-            error: VALIDATION_ERROR
-            message: El campo "firstName" es obligatorio
+            statusCode: 413
+            error: FILE_TOO_LARGE
+            message: El archivo supera el tamaño máximo permitido
+            details: 'Máximo: 5 MB'
+    InvalidFileType:
+      description: |
+        El archivo no es PDF, JPEG, PNG ni WEBP, o su contenido no coincide con el tipo declarado (`INVALID_FILE_TYPE`).
+        El contenido se revisa leyendo los primeros bytes del archivo, no solo la extensión.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            tipoNoPermitido:
+              summary: Tipo no permitido
+              value:
+                status: error
+                statusCode: 415
+                error: INVALID_FILE_TYPE
+                message: El tipo de archivo no está permitido
+                details: 'Tipos permitidos: application/pdf, image/jpeg, image/png, image/webp'
+            contenidoFalso:
+              summary: El contenido no es del tipo declarado
+              value:
+                status: error
+                statusCode: 415
+                error: INVALID_FILE_TYPE
+                message: El contenido del archivo no coincide con su tipo
+                details: 'Tipo declarado: application/pdf'
+    UploadError:
+      description: No se pudo guardar el archivo en el servidor (`UPLOAD_ERROR`), error de base de datos (`DATABASE_ERROR`) o interno (`INTERNAL_SERVER_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 500
+            error: UPLOAD_ERROR
+            message: No se pudo guardar el archivo en el servidor
+    InvalidData:
+      description: Falta un campo obligatorio o algún valor no es válido (`VALIDATION_ERROR`), o el body no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            datosInvalidos:
+              summary: Falta un campo obligatorio
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: El campo "title" es obligatorio
+            jsonInvalido:
+              summary: El body no es JSON
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_JSON
+                message: El body no es un JSON válido
+    InvalidIdOrData:
+      description: |
+        Algún ID (de la ruta o del body) no tiene formato de ObjectId (`INVALID_ID`),
+        un valor no es válido (`VALIDATION_ERROR`) o el body no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            idInvalido:
+              summary: ID con formato inválido
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_ID
+                message: El ID enviado no tiene un formato válido
+                details: 'Valor recibido en "_id": 123'
+            datosInvalidos:
+              summary: Un valor no es válido
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: El valor de "price" está fuera del rango permitido
+            jsonInvalido:
+              summary: El body no es JSON
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_JSON
+                message: El body no es un JSON válido
     InvalidId:
       description: El ID no tiene formato de ObjectId (`INVALID_ID`)
       content:

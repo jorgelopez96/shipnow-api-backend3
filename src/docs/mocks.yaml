@@ -14,13 +14,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserListResponse'
         "400":
           $ref: '#/components/responses/InvalidMockQty'
   /api/mocks/users:
@@ -36,13 +30,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserListResponse'
         "400":
           $ref: '#/components/responses/InvalidMockQty'
 
@@ -59,13 +47,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserListResponse'
         "400":
           $ref: '#/components/responses/InvalidMockQty'
 
@@ -84,13 +66,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/OrderListResponse'
         "400":
           $ref: '#/components/responses/InvalidMockQty'
   /api/mocks/orders:
@@ -106,13 +82,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Order'
+                $ref: '#/components/schemas/OrderListResponse'
         "400":
           $ref: '#/components/responses/InvalidMockQty'
 
@@ -131,13 +101,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Delivery'
+                $ref: '#/components/schemas/DeliveryListResponse'
         "400":
           $ref: '#/components/responses/InvalidMockQty'
 

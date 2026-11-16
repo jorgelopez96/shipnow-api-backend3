@@ -1,13 +1,14 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import app from '../src/app.js';
+import { config } from '../src/config/index.js';
 import { swaggerSpecs } from '../src/docs/swagger.config.js';
 import { newId } from './helpers.js';
 
 const documentedOperations = Object.entries(swaggerSpecs.paths).flatMap(([path, item]) =>
   Object.keys(item)
     .filter((method) => method !== 'parameters')
-    .map((method) => ({ method, path, responses: Object.keys(item[method].responses) }))
+    .map((method) => ({ method, path, operation: item[method], responses: Object.keys(item[method].responses) }))
 );
 
 describe('Swagger', () => {
@@ -49,6 +50,26 @@ describe('Swagger', () => {
         'SuccessResponse',
         'ErrorResponse'
       );
+    });
+
+    it('debería explicar cada endpoint con un summary y una description', () => {
+      documentedOperations.forEach(({ method, path, operation }) => {
+        expect(operation.summary, `${method} ${path}`).to.be.a('string').that.is.not.empty;
+        expect(operation.description, `${method} ${path}`).to.be.a('string').that.is.not.empty;
+      });
+    });
+
+    it('debería usar respuestas reutilizables ($ref) para todos los errores', () => {
+      const inline = documentedOperations.flatMap(({ method, path, operation }) =>
+        Object.entries(operation.responses)
+          .filter(([status, response]) => Number(status) >= 400 && !response.$ref)
+          .map(([status]) => `${status} ${method} ${path}`)
+      );
+      expect(inline).to.deep.equal([]);
+    });
+
+    it('debería apuntar el server al puerto configurado', () => {
+      expect(swaggerSpecs.servers[0].url).to.equal(`http://localhost:${config.port}`);
     });
 
     it('no debería tener referencias ($ref) rotas', () => {

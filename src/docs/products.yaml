@@ -2,26 +2,24 @@ paths:
   /api/products:
     get:
       summary: Listar productos disponibles
-      description: Solo devuelve productos con stock (`status = available`), del más nuevo al más viejo.
+      description: |
+        Devuelve el catálogo que se puede vender: solo los productos con stock (`status = available`),
+        del más nuevo al más viejo. Los productos sin stock no aparecen.
       tags: [Products]
       responses:
         "200":
-          description: Lista de productos disponibles
+          description: Lista de productos disponibles (vacía si no hay ninguno con stock)
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductListResponse'
         "500":
           $ref: '#/components/responses/InternalError'
     post:
       summary: Crear un producto
-      description: El `status` lo calcula la API según el stock. El `code` tiene que ser único.
+      description: |
+        Agrega un producto al catálogo. El `code` tiene que ser único.
+        El `status` no se manda: lo calcula la API según el stock (`available` si hay, `out_of_stock` si es 0).
       tags: [Products]
       requestBody:
         required: true
@@ -33,15 +31,11 @@ paths:
                 - required: [title, description, code, price, stock, category]
       responses:
         "201":
-          description: Producto creado
+          description: Producto creado, con su `status` calculado
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductResponse'
         "400":
           $ref: '#/components/responses/InvalidData'
         "409":
@@ -54,46 +48,28 @@ paths:
       - $ref: '#/components/parameters/id'
     get:
       summary: Obtener un producto por ID
+      description: |
+        Devuelve el detalle de un producto (título, descripción, código, precio, stock y categoría) siempre que tenga stock.
+        Si el producto existe pero está agotado, responde 404 con `PRODUCT_OUT_OF_STOCK` para que no se pueda vender.
       tags: [Products]
       responses:
         "200":
-          description: Producto encontrado
+          description: Producto encontrado y con stock
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductResponse'
         "400":
           $ref: '#/components/responses/InvalidId'
         "404":
-          description: El producto no existe (`PRODUCT_NOT_FOUND`) o no tiene stock (`PRODUCT_OUT_OF_STOCK`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                noExiste:
-                  summary: No existe
-                  value:
-                    status: error
-                    statusCode: 404
-                    error: PRODUCT_NOT_FOUND
-                    message: No se encontró el producto solicitado
-                sinStock:
-                  summary: Sin stock
-                  value:
-                    status: error
-                    statusCode: 404
-                    error: PRODUCT_OUT_OF_STOCK
-                    message: El producto solicitado no tiene stock
+          $ref: '#/components/responses/ProductUnavailable'
         "500":
           $ref: '#/components/responses/InternalError'
     put:
       summary: Actualizar un producto
-      description: Se pueden mandar solo los campos a cambiar. Si cambia el stock, se recalcula el `status`.
+      description: |
+        Modifica un producto, tenga o no stock. Se pueden mandar solo los campos a cambiar.
+        Si cambia el stock, se recalcula el `status`: por ejemplo, `{ "stock": 0 }` lo saca del catálogo.
       tags: [Products]
       requestBody:
         required: true
@@ -105,21 +81,13 @@ paths:
               stock: 0
       responses:
         "200":
-          description: Producto actualizado
+          description: Producto actualizado. Devuelve el producto con los cambios aplicados.
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductResponse'
         "400":
-          description: ID inválido (`INVALID_ID`), datos inválidos (`VALIDATION_ERROR`) o body que no es JSON (`INVALID_JSON`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/InvalidIdOrData'
         "404":
           $ref: '#/components/responses/ProductNotFound'
         "409":
@@ -128,7 +96,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     delete:
       summary: Eliminar un producto
-      description: Devuelve el producto eliminado.
+      description: Borra el producto del catálogo, tenga o no stock. Devuelve el producto eliminado como confirmación.
       tags: [Products]
       responses:
         "200":
@@ -136,11 +104,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Product'
+                $ref: '#/components/schemas/ProductResponse'
         "400":
           $ref: '#/components/responses/InvalidId'
         "404":
@@ -161,6 +125,27 @@ components:
             statusCode: 404
             error: PRODUCT_NOT_FOUND
             message: No se encontró el producto solicitado
+    ProductUnavailable:
+      description: El producto no existe (`PRODUCT_NOT_FOUND`) o existe pero no tiene stock (`PRODUCT_OUT_OF_STOCK`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            noExiste:
+              summary: No existe
+              value:
+                status: error
+                statusCode: 404
+                error: PRODUCT_NOT_FOUND
+                message: No se encontró el producto solicitado
+            sinStock:
+              summary: Sin stock
+              value:
+                status: error
+                statusCode: 404
+                error: PRODUCT_OUT_OF_STOCK
+                message: El producto solicitado no tiene stock
     DuplicateProductCode:
       description: Ya existe un producto con ese `code` (`DUPLICATE_VALUE`)
       content:

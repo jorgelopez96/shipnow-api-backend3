@@ -23,6 +23,13 @@ export const ERRORS = Object.freeze({
   DRIVER_NOT_FOUND: defineError(404, 'El repartidor no existe o no tiene rol de repartidor'),
   DRIVER_NOT_AVAILABLE: defineError(409, 'El repartidor no está disponible para tomar una nueva entrega'),
 
+  FILE_REQUIRED: defineError(400, 'Falta el archivo a subir'),
+  UNEXPECTED_FILE_FIELD: defineError(400, 'El archivo se envió en un campo distinto al esperado'),
+  INVALID_DOCUMENT_TYPE: defineError(400, 'El tipo de documento no es válido'),
+  FILE_TOO_LARGE: defineError(413, 'El archivo supera el tamaño máximo permitido'),
+  INVALID_FILE_TYPE: defineError(415, 'El tipo de archivo no está permitido'),
+  UPLOAD_ERROR: defineError(500, 'No se pudo guardar el archivo en el servidor'),
+
   INVALID_MOCK_AMOUNT: defineError(400, 'La cantidad de registros a generar debe ser un número entero positivo'),
   MOCK_LIMIT_EXCEEDED: defineError(400, 'Se pidió generar más registros de los permitidos'),
   MOCK_DEPENDENCIES_MISSING: defineError(400, 'Faltan datos relacionados para generar los registros pedidos'),

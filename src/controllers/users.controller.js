@@ -41,4 +41,12 @@ export const usersController = {
       next(error);
     }
   },
+
+  async addDocument(req, res, next) {
+    try {
+      sendSuccess(res, await usersService.addDocument(req.params.id, req.file, req.body?.type));
+    } catch (error) {
+      next(error);
+    }
+  },
 };

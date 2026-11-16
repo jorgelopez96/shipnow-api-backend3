@@ -1,5 +1,8 @@
 import { expect } from 'chai';
+import { access, readdir } from 'node:fs/promises';
+import path from 'node:path';
 import mongoose from 'mongoose';
+import { config } from '../src/config/index.js';
 import { USER_ROLES } from '../src/constants/index.js';
 import { ERRORS } from '../src/errors/error-dictionary.js';
 import { OrderModel } from '../src/models/order.model.js';
@@ -50,3 +53,11 @@ export const expectError = (res, statusCode, code, message = ERRORS[code].messag
   );
   return res.body;
 };
+
+// Archivos de prueba en memoria: con la firma del formato alcanza para pasar la validación de contenido.
+export const PDF_FILE = Buffer.from('%PDF-1.4\n%Documento de prueba\n');
+export const PNG_FILE = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+
+// Archivos que quedaron en una subcarpeta de uploads (por ejemplo 'tmp' o 'documents').
+export const filesIn = (folder) => readdir(path.join(config.uploadsDir, folder)).catch(() => []);
+export const fileExists = (filePath) => access(filePath).then(() => true, () => false);

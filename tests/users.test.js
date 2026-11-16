@@ -1,8 +1,20 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import app from '../src/app.js';
+import { config } from '../src/config/index.js';
 import { UserModel } from '../src/models/user.model.js';
-import { createDriver, createUser, expectError, expectSuccess, INVALID_ID, newId } from './helpers.js';
+import {
+  createDriver,
+  createUser,
+  expectError,
+  expectSuccess,
+  fileExists,
+  filesIn,
+  INVALID_ID,
+  newId,
+  PDF_FILE,
+  PNG_FILE,
+} from './helpers.js';
 
 const validUser = () => ({ firstName: 'Ana', lastName: 'Paz', email: 'ana.paz@shipnow.test', password: 'coder123' });
 
@@ -135,6 +147,140 @@ describe('Users API', () => {
 
     it('debería responder 400 INVALID_ID si el ID no tiene formato válido', async () => {
       expectError(await request(app).delete(`/api/users/${INVALID_ID}`), 400, 'INVALID_ID');
+    });
+  });
+
+  describe('POST /api/users/:id/documents', () => {
+    const upload = (id) => request(app).post(`/api/users/${id}/documents`);
+
+    const expectNoFilesLeft = async () => {
+      expect(await filesIn('tmp')).to.deep.equal([]);
+      expect(await filesIn('documents')).to.deep.equal([]);
+    };
+
+    it('debería guardar el archivo en uploads/documents y registrar sus metadatos en el usuario', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).field('type', 'user_document').attach('document', PDF_FILE, 'dni.pdf');
+      const user = expectSuccess(res);
+
+      expect(user).to.not.have.property('password');
+      expect(user.documents).to.have.lengthOf(1);
+      const [document] = user.documents;
+      expect(document).to.have.all.keys('originalName', 'fileName', 'path', 'mimeType', 'size', 'type', 'uploadedAt');
+      expect(document).to.include({ originalName: 'dni.pdf', mimeType: 'application/pdf', size: PDF_FILE.length, type: 'user_document' });
+      expect(document.fileName).to.match(/^\d+-[\w-]+\.pdf$/);
+      expect(document.path).to.equal(`${config.uploadsDir}/documents/${document.fileName}`);
+      expect(await fileExists(document.path)).to.equal(true);
+      expect(await filesIn('tmp')).to.deep.equal([]);
+      expect((await UserModel.findById(created._id)).documents).to.have.lengthOf(1);
+    });
+
+    it('debería usar user_document si no se envía el tipo', async () => {
+      const created = await createUser();
+      const user = expectSuccess(await upload(created._id).attach('document', PDF_FILE, 'constancia.pdf'));
+      expect(user.documents[0].type).to.equal('user_document');
+    });
+
+    it('debería guardar la licencia de un repartidor en uploads/licenses', async () => {
+      const driver = await createDriver();
+      const res = await upload(driver._id).field('type', 'driver_license').attach('document', PNG_FILE, 'licencia.png');
+      const [document] = expectSuccess(res).documents;
+
+      expect(document).to.include({ type: 'driver_license', mimeType: 'image/png' });
+      expect(document.fileName).to.match(/\.png$/);
+      expect(document.path).to.equal(`${config.uploadsDir}/licenses/${document.fileName}`);
+      expect(await fileExists(document.path)).to.equal(true);
+    });
+
+    it('debería sumar el documento a los que ya tenía el usuario', async () => {
+      const created = await createUser();
+      await upload(created._id).attach('document', PDF_FILE, 'dni.pdf');
+      const user = expectSuccess(await upload(created._id).attach('document', PDF_FILE, 'constancia.pdf'));
+      expect(user.documents.map((document) => document.originalName)).to.deep.equal(['dni.pdf', 'constancia.pdf']);
+    });
+
+    it('debería borrar los archivos del usuario cuando se elimina el usuario', async () => {
+      const created = await createUser();
+      const [document] = expectSuccess(await upload(created._id).attach('document', PDF_FILE, 'dni.pdf')).documents;
+
+      expectSuccess(await request(app).delete(`/api/users/${created._id}`));
+      expect(await fileExists(document.path)).to.equal(false);
+    });
+
+    it('debería responder 400 FILE_REQUIRED si no se envía el archivo', async () => {
+      const created = await createUser();
+      expectError(await upload(created._id).field('type', 'user_document'), 400, 'FILE_REQUIRED');
+    });
+
+    it('debería responder 400 FILE_REQUIRED si el body es JSON en lugar de multipart/form-data', async () => {
+      const created = await createUser();
+      expectError(await upload(created._id).send({ type: 'user_document' }), 400, 'FILE_REQUIRED');
+    });
+
+    it('debería responder 400 UNEXPECTED_FILE_FIELD si el archivo llega en otro campo', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).attach('archivo', PDF_FILE, 'dni.pdf');
+      expect(expectError(res, 400, 'UNEXPECTED_FILE_FIELD').details).to.equal('Se espera un solo archivo en el campo "document"');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 400 UNEXPECTED_FILE_FIELD si se envía más de un archivo', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).attach('document', PDF_FILE, 'dni.pdf').attach('document', PDF_FILE, 'otro.pdf');
+      expectError(res, 400, 'UNEXPECTED_FILE_FIELD');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 400 INVALID_DOCUMENT_TYPE si el tipo de documento no existe y no dejar el archivo', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).field('type', 'pasaporte').attach('document', PDF_FILE, 'dni.pdf');
+      expect(expectError(res, 400, 'INVALID_DOCUMENT_TYPE').details).to.equal('Tipos válidos: user_document, driver_license');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 400 INVALID_DOCUMENT_TYPE si se manda delivery_proof, que es solo para pedidos', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).field('type', 'delivery_proof').attach('document', PDF_FILE, 'dni.pdf');
+      expectError(res, 400, 'INVALID_DOCUMENT_TYPE');
+    });
+
+    it('debería responder 400 INVALID_DOCUMENT_TYPE si un usuario que no es repartidor sube una licencia', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).field('type', 'driver_license').attach('document', PDF_FILE, 'licencia.pdf');
+      expectError(res, 400, 'INVALID_DOCUMENT_TYPE', 'Solo los repartidores pueden cargar una licencia de conducir');
+      expect(await filesIn('licenses')).to.deep.equal([]);
+    });
+
+    it('debería responder 415 INVALID_FILE_TYPE si el tipo de archivo no está permitido', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).attach('document', Buffer.from('hola'), 'notas.txt');
+      expectError(res, 415, 'INVALID_FILE_TYPE');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 415 INVALID_FILE_TYPE si el contenido no coincide con el tipo declarado', async () => {
+      const created = await createUser();
+      const res = await upload(created._id).attach('document', Buffer.from('MZ ejecutable disfrazado'), 'dni.pdf');
+      expectError(res, 415, 'INVALID_FILE_TYPE', 'El contenido del archivo no coincide con su tipo');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 413 FILE_TOO_LARGE si el archivo supera los 5 MB', async () => {
+      const created = await createUser();
+      const bigFile = Buffer.concat([PDF_FILE, Buffer.alloc(5 * 1024 * 1024)]);
+      const res = await upload(created._id).attach('document', bigFile, 'enorme.pdf');
+      expect(expectError(res, 413, 'FILE_TOO_LARGE').details).to.equal('Máximo: 5 MB');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 404 USER_NOT_FOUND si el usuario no existe y no dejar el archivo', async () => {
+      expectError(await upload(newId()).attach('document', PDF_FILE, 'dni.pdf'), 404, 'USER_NOT_FOUND');
+      await expectNoFilesLeft();
+    });
+
+    it('debería responder 400 INVALID_ID si el ID no tiene formato válido', async () => {
+      expectError(await upload(INVALID_ID).attach('document', PDF_FILE, 'dni.pdf'), 400, 'INVALID_ID');
+      await expectNoFilesLeft();
     });
   });
 });

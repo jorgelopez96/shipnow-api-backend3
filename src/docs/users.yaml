@@ -2,25 +2,24 @@ paths:
   /api/users:
     get:
       summary: Listar usuarios
+      description: |
+        Devuelve todos los usuarios registrados, de cualquier rol (clientes, repartidores, comercios y administradores),
+        con sus documentos cargados. La contraseña nunca viene en la respuesta.
       tags: [Users]
       responses:
         "200":
-          description: Lista de usuarios
+          description: Lista de usuarios (vacía si no hay ninguno)
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserListResponse'
         "500":
           $ref: '#/components/responses/InternalError'
     post:
       summary: Crear un usuario
-      description: El email tiene que ser único. La contraseña se guarda hasheada y no se devuelve.
+      description: |
+        Registra un usuario nuevo. Si no se manda `role`, queda como `customer`.
+        El email tiene que ser único. La contraseña se guarda hasheada con bcrypt y no se devuelve.
       tags: [Users]
       requestBody:
         required: true
@@ -32,47 +31,15 @@ paths:
                 - required: [firstName, lastName, email, password]
       responses:
         "201":
-          description: Usuario creado
+          description: Usuario creado. Devuelve el usuario sin la contraseña.
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         "400":
-          description: Falta la contraseña (`PASSWORD_REQUIRED`), faltan campos o el rol no existe (`VALIDATION_ERROR`), o el body no es JSON (`INVALID_JSON`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                sinPassword:
-                  summary: Falta la contraseña
-                  value:
-                    status: error
-                    statusCode: 400
-                    error: PASSWORD_REQUIRED
-                    message: La contraseña es obligatoria
-                datosInvalidos:
-                  summary: Falta un campo obligatorio
-                  value:
-                    status: error
-                    statusCode: 400
-                    error: VALIDATION_ERROR
-                    message: El campo "lastName" es obligatorio
+          $ref: '#/components/responses/InvalidUserData'
         "409":
-          description: Ya existe un usuario con ese email (`USER_ALREADY_EXISTS`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 409
-                error: USER_ALREADY_EXISTS
-                message: Ya existe un usuario con ese email
+          $ref: '#/components/responses/UserAlreadyExists'
         "500":
           $ref: '#/components/responses/InternalError'
 
@@ -81,6 +48,9 @@ paths:
       - $ref: '#/components/parameters/id'
     get:
       summary: Obtener un usuario por ID
+      description: |
+        Devuelve los datos de un usuario puntual: nombre, email, rol, disponibilidad (si es repartidor)
+        y la lista de documentos que tiene cargados. Sirve para ver el detalle antes de editarlo o de asignarle una entrega.
       tags: [Users]
       responses:
         "200":
@@ -88,11 +58,7 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         "400":
           $ref: '#/components/responses/InvalidId'
         "404":
@@ -101,7 +67,10 @@ paths:
           $ref: '#/components/responses/InternalError'
     put:
       summary: Actualizar un usuario
-      description: Se pueden mandar solo los campos a cambiar. Si se cambia el email, tiene que seguir siendo único.
+      description: |
+        Modifica los datos de un usuario. Se pueden mandar solo los campos a cambiar; el resto queda igual.
+        Por ejemplo, `{ "isAvailable": false }` saca a un repartidor de la asignación de entregas.
+        Si se cambia el email tiene que seguir siendo único, y si se cambia la contraseña se vuelve a hashear.
       tags: [Users]
       requestBody:
         required: true
@@ -113,39 +82,24 @@ paths:
               isAvailable: false
       responses:
         "200":
-          description: Usuario actualizado
+          description: Usuario actualizado. Devuelve el usuario con los cambios aplicados.
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         "400":
-          description: ID inválido (`INVALID_ID`), contraseña vacía (`PASSWORD_REQUIRED`), datos inválidos (`VALIDATION_ERROR`) o body que no es JSON (`INVALID_JSON`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 400
-                error: VALIDATION_ERROR
-                message: '"superuser" no es un valor válido para "role"'
+          $ref: '#/components/responses/InvalidUserData'
         "404":
           $ref: '#/components/responses/UserNotFound'
         "409":
-          description: El email ya lo usa otro usuario (`USER_ALREADY_EXISTS`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/UserAlreadyExists'
         "500":
           $ref: '#/components/responses/InternalError'
     delete:
       summary: Eliminar un usuario
-      description: Devuelve el usuario eliminado.
+      description: |
+        Borra el usuario de la base y también los archivos de sus documentos guardados en el servidor.
+        Devuelve el usuario eliminado como confirmación.
       tags: [Users]
       responses:
         "200":
@@ -153,17 +107,62 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         "400":
           $ref: '#/components/responses/InvalidId'
         "404":
           $ref: '#/components/responses/UserNotFound'
         "500":
           $ref: '#/components/responses/InternalError'
+
+  /api/users/{id}/documents:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      summary: Subir un documento del usuario
+      description: |
+        Recibe un archivo por `multipart/form-data` en el campo **`document`** y lo asocia al usuario
+        (por ejemplo el DNI de un cliente o la licencia de conducir de un repartidor).
+
+        - Tipos de archivo: PDF, JPEG, PNG o WEBP. Tamaño máximo: **5 MB**. Un solo archivo por petición.
+        - `type` es opcional (`user_document` por defecto). `driver_license` solo se acepta para usuarios con rol `driver`.
+        - El archivo se guarda en `uploads/documents` o `uploads/licenses` con un nombre único, y sus metadatos se suman a `documents`.
+        - Si algo falla (usuario inexistente, tipo inválido, etc.), el archivo se borra del servidor.
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document]
+              properties:
+                document:
+                  type: string
+                  format: binary
+                  description: Archivo PDF, JPEG, PNG o WEBP de hasta 5 MB
+                type:
+                  type: string
+                  enum: [user_document, driver_license]
+                  default: user_document
+                  description: Tipo de documento
+      responses:
+        "200":
+          description: Documento cargado. Devuelve el usuario actualizado (sin la contraseña).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        "400":
+          $ref: '#/components/responses/InvalidUserDocument'
+        "404":
+          $ref: '#/components/responses/UserNotFound'
+        "413":
+          $ref: '#/components/responses/FileTooLarge'
+        "415":
+          $ref: '#/components/responses/InvalidFileType'
+        "500":
+          $ref: '#/components/responses/UploadError'
 
 components:
   responses:
@@ -178,3 +177,100 @@ components:
             statusCode: 404
             error: USER_NOT_FOUND
             message: El usuario solicitado no existe
+    UserAlreadyExists:
+      description: El email ya lo usa otro usuario (`USER_ALREADY_EXISTS`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 409
+            error: USER_ALREADY_EXISTS
+            message: Ya existe un usuario con ese email
+            details: 'Email: lucia.fernandez@shipnow.test'
+    InvalidUserData:
+      description: |
+        Falta la contraseña o llegó vacía (`PASSWORD_REQUIRED`), falta un campo obligatorio o el rol no existe (`VALIDATION_ERROR`),
+        el ID de la ruta no tiene formato válido (`INVALID_ID`, solo al actualizar) o el body no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            sinPassword:
+              summary: Falta la contraseña
+              value:
+                status: error
+                statusCode: 400
+                error: PASSWORD_REQUIRED
+                message: La contraseña es obligatoria
+            faltaCampo:
+              summary: Falta un campo obligatorio
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: El campo "lastName" es obligatorio
+            rolInvalido:
+              summary: El rol no existe
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: '"superuser" no es un valor válido para "role"'
+            idInvalido:
+              summary: ID con formato inválido (al actualizar)
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_ID
+                message: El ID enviado no tiene un formato válido
+                details: 'Valor recibido en "_id": 123'
+            jsonInvalido:
+              summary: El body no es JSON
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_JSON
+                message: El body no es un JSON válido
+    InvalidUserDocument:
+      description: |
+        Falta el archivo (`FILE_REQUIRED`), llegó en otro campo o más de uno (`UNEXPECTED_FILE_FIELD`),
+        el tipo de documento no es válido o es una licencia de alguien que no es repartidor (`INVALID_DOCUMENT_TYPE`),
+        ID inválido (`INVALID_ID`) o formulario mal armado (`VALIDATION_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            sinArchivo:
+              summary: Falta el archivo
+              value:
+                status: error
+                statusCode: 400
+                error: FILE_REQUIRED
+                message: Falta el archivo a subir
+            otroCampo:
+              summary: El archivo llegó en otro campo
+              value:
+                status: error
+                statusCode: 400
+                error: UNEXPECTED_FILE_FIELD
+                message: El archivo se envió en un campo distinto al esperado
+                details: Se espera un solo archivo en el campo "document"
+            tipoInvalido:
+              summary: Tipo de documento inexistente
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_DOCUMENT_TYPE
+                message: El tipo de documento no es válido
+                details: 'Tipos válidos: user_document, driver_license'
+            licenciaSinRol:
+              summary: Licencia de un usuario que no es repartidor
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_DOCUMENT_TYPE
+                message: Solo los repartidores pueden cargar una licencia de conducir

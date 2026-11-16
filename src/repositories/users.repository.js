@@ -9,6 +9,7 @@ export const usersRepository = {
   findById: (id) => UserModel.findById(id),
   findIdByEmail: (email) => UserModel.exists({ email: String(email).toLowerCase().trim() }),
   updateById: (id, data) => UserModel.findByIdAndUpdate(id, data, UPDATE_OPTIONS),
+  addDocument: (id, document) => UserModel.findByIdAndUpdate(id, { $push: { documents: document } }, UPDATE_OPTIONS),
   deleteById: (id) => UserModel.findByIdAndDelete(id),
   deleteByIds: (ids) => UserModel.deleteMany({ _id: { $in: ids } }),
 };

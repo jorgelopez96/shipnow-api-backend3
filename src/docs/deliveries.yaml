@@ -2,27 +2,24 @@ paths:
   /api/deliveries:
     get:
       summary: Listar entregas
-      description: Cada entrega trae el pedido (estado y total) y el repartidor (nombre y rol) populados.
+      description: |
+        Devuelve todas las entregas con su estado y prioridad.
+        Cada una trae el pedido (estado y total) y el repartidor (nombre y rol) populados; las pendientes no tienen repartidor.
       tags: [Deliveries]
       responses:
         "200":
-          description: Lista de entregas
+          description: Lista de entregas (vacía si no hay ninguna)
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Delivery'
+                $ref: '#/components/schemas/DeliveryListResponse'
         "500":
           $ref: '#/components/responses/InternalError'
     post:
       summary: Crear una entrega
       description: |
-        Con `driver` la entrega queda `assigned`; sin `driver` queda `pending`.
+        Genera la entrega de un pedido existente. Con `driver` la entrega queda `assigned`; sin `driver` queda `pending`
+        hasta que se le asigne uno. El repartidor tiene que tener rol `driver` y estar disponible.
         La prioridad se copia del pedido. En la respuesta `order` y `driver` vienen como IDs.
       tags: [Deliveries]
       requestBody:
@@ -43,58 +40,17 @@ paths:
                   example: 665f4d0a8f9a1b001234abd0
       responses:
         "201":
-          description: Entrega creada
+          description: Entrega creada (`assigned` o `pending`)
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Delivery'
+                $ref: '#/components/schemas/DeliveryResponse'
         "400":
-          description: Falta `order` (`VALIDATION_ERROR`), un ID con formato inválido (`INVALID_ID`) o body que no es JSON (`INVALID_JSON`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 400
-                error: VALIDATION_ERROR
-                message: El campo "order" es obligatorio
+          $ref: '#/components/responses/InvalidDeliveryData'
         "404":
-          description: El pedido no existe (`ORDER_NOT_FOUND`) o el repartidor no existe o no tiene rol `driver` (`DRIVER_NOT_FOUND`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                pedidoInexistente:
-                  summary: El pedido no existe
-                  value:
-                    status: error
-                    statusCode: 404
-                    error: ORDER_NOT_FOUND
-                    message: El pedido de la entrega no existe
-                repartidorInexistente:
-                  summary: El repartidor no existe
-                  value:
-                    status: error
-                    statusCode: 404
-                    error: DRIVER_NOT_FOUND
-                    message: El repartidor no existe o no tiene rol de repartidor
+          $ref: '#/components/responses/DeliveryRelationNotFound'
         "409":
-          description: El repartidor no está disponible (`DRIVER_NOT_AVAILABLE`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 409
-                error: DRIVER_NOT_AVAILABLE
-                message: El repartidor no está disponible para tomar una nueva entrega
+          $ref: '#/components/responses/DriverNotAvailable'
         "500":
           $ref: '#/components/responses/InternalError'
 
@@ -103,6 +59,9 @@ paths:
       - $ref: '#/components/parameters/id'
     get:
       summary: Obtener una entrega por ID
+      description: |
+        Devuelve el detalle de una entrega: estado, prioridad, el pedido populado (estado y total)
+        y el repartidor asignado (nombre y rol), si ya tiene uno. Sirve para seguir quién lleva un pedido y en qué etapa está.
       tags: [Deliveries]
       responses:
         "200":
@@ -110,23 +69,78 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/SuccessResponse'
-                  - properties:
-                      payload:
-                        $ref: '#/components/schemas/Delivery'
+                $ref: '#/components/schemas/DeliveryResponse'
         "400":
           $ref: '#/components/responses/InvalidId'
         "404":
-          description: La entrega no existe (`DELIVERY_NOT_FOUND`)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                status: error
-                statusCode: 404
-                error: DELIVERY_NOT_FOUND
-                message: No se encontró la entrega solicitada
+          $ref: '#/components/responses/DeliveryNotFound'
         "500":
           $ref: '#/components/responses/InternalError'
+
+components:
+  responses:
+    DeliveryNotFound:
+      description: La entrega no existe (`DELIVERY_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 404
+            error: DELIVERY_NOT_FOUND
+            message: No se encontró la entrega solicitada
+    InvalidDeliveryData:
+      description: Falta `order` (`VALIDATION_ERROR`), `order` o `driver` con formato inválido (`INVALID_ID`) o body que no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            sinPedido:
+              summary: Falta el pedido
+              value:
+                status: error
+                statusCode: 400
+                error: VALIDATION_ERROR
+                message: El campo "order" es obligatorio
+            idInvalido:
+              summary: ID con formato inválido
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_ID
+                message: El ID enviado no tiene un formato válido
+                details: 'Valor recibido en "_id": 123'
+    DeliveryRelationNotFound:
+      description: El pedido no existe (`ORDER_NOT_FOUND`) o el repartidor no existe o no tiene rol `driver` (`DRIVER_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            pedidoInexistente:
+              summary: El pedido no existe
+              value:
+                status: error
+                statusCode: 404
+                error: ORDER_NOT_FOUND
+                message: El pedido de la entrega no existe
+            repartidorInexistente:
+              summary: El repartidor no existe
+              value:
+                status: error
+                statusCode: 404
+                error: DRIVER_NOT_FOUND
+                message: El repartidor no existe o no tiene rol de repartidor
+    DriverNotAvailable:
+      description: El repartidor no está disponible (`DRIVER_NOT_AVAILABLE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 409
+            error: DRIVER_NOT_AVAILABLE
+            message: El repartidor no está disponible para tomar una nueva entrega

@@ -1,9 +1,10 @@
-import { ORDER_STATUS } from '../constants/index.js';
+import { DOCUMENT_TYPES, ORDER_STATUS } from '../constants/index.js';
 import { AppError } from '../errors/app-error.js';
 import { logger } from '../logger/index.js';
 import { ordersRepository } from '../repositories/orders.repository.js';
 import { usersRepository } from '../repositories/users.repository.js';
 import { calculateOrderTotal } from '../utils/order-total.js';
+import { removeFile, storeFile, withUploadedFile } from '../utils/uploaded-files.js';
 
 const CLOSED_STATUSES = [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED];
 
@@ -39,4 +40,19 @@ export const ordersService = {
     logger.info(`Pedido ${id} cambió de estado: ${order.status} → ${status}`);
     return updated;
   },
+
+  // Cada pedido tiene un solo comprobante: si se sube otro, reemplaza al anterior y se borra el archivo viejo.
+  addProof: (id, file) =>
+    withUploadedFile(file, async () => {
+      const order = await ordersRepository.findById(id);
+      if (!order) throw new AppError('ORDER_NOT_FOUND');
+
+      const proof = await storeFile(file, DOCUMENT_TYPES.DELIVERY_PROOF);
+      const updated = await ordersRepository.setProof(id, proof);
+      if (!updated) throw new AppError('ORDER_NOT_FOUND');
+      if (order.proof) await removeFile(order.proof.path);
+
+      logger.info(`Comprobante de entrega asociado al pedido ${id}`, { mimeType: proof.mimeType, size: proof.size, replaced: Boolean(order.proof) });
+      return updated;
+    }),
 };
