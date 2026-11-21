@@ -3,9 +3,11 @@ import { AppError } from '../errors/app-error.js';
 import { deliveriesRepository } from '../repositories/deliveries.repository.js';
 import { ordersRepository } from '../repositories/orders.repository.js';
 import { usersRepository } from '../repositories/users.repository.js';
+import { readEnumFilter, readPagination } from '../utils/list-query.js';
 
 export const deliveriesService = {
-  getAll: () => deliveriesRepository.findAll(),
+  getAll: (query) =>
+    deliveriesRepository.findPage(readEnumFilter(query, 'status', Object.values(DELIVERY_STATUS)), readPagination(query)),
 
   async getById(id) {
     const delivery = await deliveriesRepository.findById(id);

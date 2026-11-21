@@ -1,10 +1,10 @@
 import { deliveriesService } from '../services/deliveries.service.js';
-import { sendSuccess } from '../utils/send-success.js';
+import { sendPage, sendSuccess } from '../utils/send-success.js';
 
 export const deliveriesController = {
   async getAll(req, res, next) {
     try {
-      sendSuccess(res, await deliveriesService.getAll());
+      sendPage(res, await deliveriesService.getAll(req.query));
     } catch (error) {
       next(error);
     }

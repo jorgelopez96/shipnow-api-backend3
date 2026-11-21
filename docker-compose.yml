@@ -1,0 +1,35 @@
+# API + MongoDB para probar la imagen sin tener Mongo instalado: docker compose up --build
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    # Valores fijos a propósito: compose lee el .env de la carpeta para los ${...} y levantaría el entorno de desarrollo.
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      MONGODB_URI: mongodb://mongo:27017/shipnow
+    volumes:
+      - uploads:/app/uploads
+      - logs:/app/logs
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Solo es accesible desde la red interna de compose: no publica el puerto 27017.
+  mongo:
+    image: mongo:8.0
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  uploads:
+  logs:

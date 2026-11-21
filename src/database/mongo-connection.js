@@ -8,6 +8,8 @@ const watchConnection = () => {
   mongoose.connection.on('error', (error) => logger.error(...toErrorEntry('Error en la conexión con MongoDB:', error)));
 };
 
+export const isMongoConnected = () => mongoose.connection.readyState === 1;
+
 export const connectMongo = async (uri) => {
   await mongoose.connect(uri);
   logger.info(`Conectado a MongoDB en ${maskMongoUri(uri)}`);

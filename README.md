@@ -11,10 +11,11 @@ Incluye:
 - **Documentación interactiva** con Swagger en `/api/docs` (ver [Documentación con Swagger](#documentación-con-swagger)).
 - **Tests funcionales** con Mocha, Chai y Supertest (ver [Testing](#testing)).
 - **Carga de archivos** con Multer: documentos de usuario y comprobantes de entrega (ver [Carga de archivos](#carga-de-archivos)).
+- **Preparada para producción:** listados paginados, health check y contenedor de Docker (ver [Producción y Docker](#producción-y-docker)).
 
 ## Instalación
 
-Requisitos: Node.js 20.19 o superior (o 22.12+) y una base MongoDB (local o en Atlas).
+Requisitos: Node.js 20.19 o superior (o 22.12+) y una base MongoDB (local o en Atlas). Para correrla en un contenedor, ver [Producción y Docker](#producción-y-docker).
 
 ```bash
 git clone <url-del-repo>
@@ -47,7 +48,7 @@ npm start     # node server.js
 npm test      # tests funcionales (ver Testing)
 ```
 
-Con el servidor levantado, la documentación queda en `http://localhost:8080/api/docs` (o el puerto que tenga `PORT`).
+Con el servidor levantado, la documentación queda en `http://localhost:8080/api/docs` (o el puerto que tenga `PORT`) y el health check en `http://localhost:8080/api/health`.
 
 ## Documentación con Swagger
 
@@ -65,11 +66,12 @@ src/docs/
 ├── products.yaml      Products
 ├── orders.yaml        Orders
 ├── deliveries.yaml    Deliveries
+├── health.yaml        Health
 ├── mocks.yaml         Mocks
 └── logger.yaml        Logger
 ```
 
-`app.js` solo monta la ruta: `app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs))`. La URL del servidor local sale de `config.port`, así siempre coincide con el puerto real.
+`app.js` solo monta la ruta: `app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs))`. El server de la especificación es relativo (`/`), así **Try it out** le pega al mismo host y puerto desde el que se abrió `/api/docs`, ya sea local, en Docker o en un servidor.
 
 ### Qué está documentado
 
@@ -79,6 +81,7 @@ src/docs/
 | **Products**   | `GET`/`POST /api/products`, `GET`/`PUT`/`DELETE /api/products/{id}`                             |
 | **Orders**     | `GET`/`POST /api/orders`, `GET /api/orders/{id}`, `PATCH /api/orders/{id}/status`, `POST /api/orders/{id}/proof` |
 | **Deliveries** | `GET`/`POST /api/deliveries`, `GET /api/deliveries/{id}`                                        |
+| **Health**     | `GET /api/health`                                                                               |
 | **Mocks**      | `GET /api/mocks/mockingusers`, `/mockingorders`, `/drivers`, `/deliveries` (y sus alias), `POST /api/mocks/generateData` (y `/seed`) |
 | **Logger**     | `GET /api/loggerTest`, aclarado como herramienta de validación y no de negocio                  |
 
@@ -88,9 +91,9 @@ Cada endpoint tiene método, ruta, un `summary` corto y una `description` que ex
 
 **Respuestas exitosas reutilizables:** `UserResponse`, `UserListResponse`, `ProductResponse`, `ProductListResponse`, `OrderResponse`, `OrderListResponse`, `DeliveryResponse` y `DeliveryListResponse` combinan `SuccessResponse` con el recurso. Cada endpoint las referencia con `$ref` en lugar de repetir la estructura.
 
-**Respuestas de error reutilizables:** todos los errores se definen una sola vez en `components/responses` y los endpoints los referencian con `$ref`, sin ejemplos inline. Las comunes están en `schemas.yaml` (`InvalidId`, `InvalidData`, `InvalidIdOrData`, `InternalError`, `FileTooLarge`, `InvalidFileType`, `UploadError`) y las de cada módulo en su YAML (`UserNotFound`, `UserAlreadyExists`, `InvalidUserData`, `ProductUnavailable`, `OrderAlreadyClosed`, `DriverNotAvailable`, etc.). Cuando un status puede tener varias causas, la respuesta trae un ejemplo por cada una para elegirlo en Swagger UI. Por ejemplo, `InvalidUserData` se usa en `POST` y `PUT /api/users` y muestra contraseña faltante, campo obligatorio, rol inexistente, ID inválido y JSON roto.
+**Respuestas de error reutilizables:** todos los errores se definen una sola vez en `components/responses` y los endpoints los referencian con `$ref`, sin ejemplos inline. Las comunes están en `schemas.yaml` (`InvalidQueryParam`, `InvalidId`, `InvalidData`, `InvalidIdOrData`, `InternalError`, `FileTooLarge`, `InvalidFileType`, `UploadError`) y las de cada módulo en su YAML (`UserNotFound`, `UserAlreadyExists`, `InvalidUserData`, `ProductUnavailable`, `OrderAlreadyClosed`, `DriverNotAvailable`, etc.). Cuando un status puede tener varias causas, la respuesta trae un ejemplo por cada una para elegirlo en Swagger UI. Por ejemplo, `InvalidUserData` se usa en `POST` y `PUT /api/users` y muestra contraseña faltante, campo obligatorio, rol inexistente, ID inválido y JSON roto.
 
-Los tests (`tests/docs.test.js`) verifican que no haya `$ref` rotos, que cada endpoint tenga `summary` y `description`, que todos los errores usen `$ref`, que `GET /api/docs/` responda 200 y que la URL del server coincida con el puerto configurado.
+Los tests (`tests/docs.test.js`) verifican que no haya `$ref` rotos, que cada endpoint tenga `summary` y `description`, que todos los errores usen `$ref`, que `GET /api/docs/` responda 200, que el server sea relativo y que todos los listados documenten `page` y `limit`.
 
 Los dos endpoints de carga están documentados como `multipart/form-data`: nombre del campo del archivo (`document` o `proof`), campo `type` con los tipos de documento permitidos, tipos de archivo y tamaño máximo, respuesta exitosa y cada error posible. Desde **Try it out** se puede elegir el archivo y subirlo.
 
@@ -119,7 +122,7 @@ Tests funcionales que le pegan a los endpoints reales (ruta → controller → s
 
 ### Cómo ejecutarlos
 
-Con MongoDB corriendo:
+> **Requisito: un MongoDB corriendo** en la URI de `.env.test` (por defecto `mongodb://127.0.0.1:27017/shipnow_test`). Los tests no usan una base en memoria. Si no tenés Mongo instalado, alcanza con levantar uno en Docker: `docker run -d --name shipnow-mongo-test -p 27017:27017 mongo:8.0`.
 
 ```bash
 cp .env.test.example .env.test   # solo la primera vez
@@ -215,6 +218,12 @@ Todas las respuestas exitosas tienen la misma forma:
 { "status": "success", "payload": {} }
 ```
 
+Los listados (`GET /api/users`, `/api/products`, `/api/orders` y `/api/deliveries`) están paginados y suman `pagination` (ver [Paginación y filtros](#paginación-y-filtros)):
+
+```json
+{ "status": "success", "payload": [], "pagination": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 } }
+```
+
 Los errores usan el formato del diccionario (ver [Errores](#errores)).
 
 ## Endpoints
@@ -223,7 +232,7 @@ Los errores usan el formato del diccionario (ver [Errores](#errores)).
 
 | Método | Ruta                 | Descripción                                                     |
 | ------ | -------------------- | --------------------------------------------------------------- |
-| GET    | `/api/products`      | Lista los productos con stock                                   |
+| GET    | `/api/products`      | Lista los productos con stock (paginado)                        |
 | GET    | `/api/products/:id`  | Obtiene un producto (`404 PRODUCT_OUT_OF_STOCK` si no hay stock) |
 | POST   | `/api/products`      | Crea un producto                                                |
 | PUT    | `/api/products/:id`  | Actualiza un producto                                           |
@@ -235,7 +244,7 @@ Campos: `title`, `description`, `code` (único), `price`, `stock` y `category`, 
 
 | Método | Ruta              | Descripción                                                          |
 | ------ | ----------------- | -------------------------------------------------------------------- |
-| GET    | `/api/users`      | Lista los usuarios                                                   |
+| GET    | `/api/users`      | Lista los usuarios (paginado, filtro `?role=`)                       |
 | GET    | `/api/users/:id`  | Obtiene un usuario                                                   |
 | POST   | `/api/users`      | Crea un usuario (la contraseña se hashea con bcrypt)                 |
 | PUT    | `/api/users/:id`  | Actualiza un usuario (si cambia la contraseña, se vuelve a hashear) |
@@ -250,12 +259,12 @@ Campos: `firstName`, `lastName`, `email` (único), `password`, `role` (`customer
 
 | Método | Ruta                       | Descripción                                                                                   |
 | ------ | -------------------------- | --------------------------------------------------------------------------------------------- |
-| GET    | `/api/orders`              | Lista los pedidos con los datos del cliente                                                   |
+| GET    | `/api/orders`              | Lista los pedidos con los datos del cliente (paginado, filtro `?status=`)                     |
 | GET    | `/api/orders/:id`          | Obtiene un pedido                                                                             |
 | POST   | `/api/orders`              | Crea un pedido. El total se calcula desde los items y el cliente tiene que existir           |
 | PATCH  | `/api/orders/:id/status`   | Cambia el estado (`{ "status": "in_transit" }`). Un pedido entregado o cancelado ya no cambia |
 | POST   | `/api/orders/:id/proof`    | Sube el comprobante de entrega del pedido (ver [Carga de archivos](#carga-de-archivos))       |
-| GET    | `/api/deliveries`          | Lista las entregas con su pedido y repartidor                                                 |
+| GET    | `/api/deliveries`          | Lista las entregas con su pedido y repartidor (paginado, filtro `?status=`)                   |
 | GET    | `/api/deliveries/:id`      | Obtiene una entrega                                                                           |
 | POST   | `/api/deliveries`          | Crea una entrega. El pedido tiene que existir y el repartidor tener rol `driver` y estar disponible |
 
@@ -410,6 +419,7 @@ Está en `src/errors/error-dictionary.js`.
 | `VALIDATION_ERROR`          | 400  | Faltan datos obligatorios o tienen un valor inválido                 |
 | `INVALID_ID`                | 400  | El ID no tiene formato de ObjectId                                   |
 | `INVALID_JSON`              | 400  | El body no es un JSON válido                                         |
+| `INVALID_QUERY_PARAM`       | 400  | `page`, `limit` o un filtro de un listado no son válidos             |
 | `ROUTE_NOT_FOUND`           | 404  | La ruta no existe                                                    |
 | `DUPLICATE_VALUE`           | 409  | Se viola un índice único (por ejemplo, el `code` de un producto)     |
 | `USER_NOT_FOUND`            | 404  | El usuario (o el cliente del pedido) no existe                       |
@@ -671,3 +681,154 @@ Con `NODE_ENV=production` dejan de aparecer `debug` y `http`, los logs van sin c
 2026-11-16 00:17:44 [warning] [8996fe5c-cd35-4ec5-8b08-07c8b7049fdd] 404 ROUTE_NOT_FOUND GET /api/loggerTest
 2026-11-16 00:17:44 [warning] [e870d39f-ca64-47a0-8fb5-3bd21d54273b] 400 INVALID_ID GET /api/users/123
 ```
+
+## Producción y Docker
+
+La API está preparada para correr en un entorno parecido a producción: los listados no devuelven colecciones completas, la configuración cambia por entorno, hay un health check y se puede levantar en un contenedor de Docker.
+
+### Variables de entorno necesarias
+
+| Variable      | Obligatoria | Default          | Para qué                                                         |
+| ------------- | ----------- | ---------------- | ---------------------------------------------------------------- |
+| `NODE_ENV`    | Sí          | -                | `development`, `test` o `production`                             |
+| `MONGODB_URI` | Sí          | -                | Conexión a MongoDB, el único servicio externo que usa la API     |
+| `PORT`        | No          | `8080`           | Puerto HTTP                                                      |
+| `LOG_LEVEL`   | No          | `debug` en development, `info` en el resto | Nivel mínimo de los logs de consola     |
+
+Hay una plantilla por entorno. Las copias con los valores reales están en `.gitignore`:
+
+| Entorno       | Archivo que lee la app                                   | Plantilla                 |
+| ------------- | -------------------------------------------------------- | ------------------------- |
+| `development` | `.env`                                                   | `.env.example`            |
+| `test`        | `.env.test` (lo carga `npm test`)                        | `.env.test.example`       |
+| `production`  | Variables del entorno o `--env-file .env.production` en Docker | `.env.production.example` |
+
+- **Sin valores sensibles en el código:** la URI de MongoDB (con usuario y contraseña, si tiene) solo vive en esos archivos o en las variables del servidor, y en los logs sale enmascarada.
+- **JWT:** la API todavía no tiene autenticación, así que no hay secreto de JWT que configurar.
+- **Servicios externos:** el único es MongoDB (`MONGODB_URI`).
+- **Validación al iniciar:** si falta `NODE_ENV` o `MONGODB_URI`, o `PORT`, `NODE_ENV` o `LOG_LEVEL` tienen un valor inválido, la app no arranca y lo explica con un log `fatal` (ver [Variables de entorno](#variables-de-entorno)). Si MongoDB no responde al arrancar, tampoco levanta el servidor HTTP.
+
+### Cómo correr la API localmente
+
+```bash
+npm install
+cp .env.example .env    # completá MONGODB_URI
+npm run dev             # con nodemon
+npm start               # node server.js (el mismo comando que usa la imagen de Docker)
+```
+
+### Cómo correr los tests
+
+```bash
+cp .env.test.example .env.test   # solo la primera vez
+npm test
+```
+
+Necesitan un MongoDB corriendo (ver [Testing](#testing)). Usan su propia base, `shipnow_test`, y la dejan vacía al terminar, así que se pueden correr varias veces seguidas.
+
+### Swagger y health check
+
+- **Swagger:** `http://localhost:8080/api/docs`
+- **Health check:** `http://localhost:8080/api/health`
+
+```json
+{
+  "status": "success",
+  "payload": { "status": "ok", "environment": "production", "uptime": 3600, "timestamp": "2026-11-21T15:00:00.000Z", "database": "connected" }
+}
+```
+
+El health check devuelve solo el estado de la API, el entorno, los segundos que lleva levantada, la hora del servidor y si hay conexión con MongoDB. No muestra versiones, URIs, rutas del servidor ni variables de entorno, y la app no manda el header `X-Powered-By`. Lo usa el `HEALTHCHECK` de la imagen.
+
+### Paginación y filtros
+
+Ningún listado devuelve la colección completa:
+
+| Endpoint              | Filtro opcional                                                          |
+| --------------------- | ------------------------------------------------------------------------ |
+| `GET /api/users`      | `role`: `admin`, `customer`, `driver` o `store`                          |
+| `GET /api/orders`     | `status`: `created`, `assigned`, `picked_up`, `in_transit`, `delivered` o `cancelled` |
+| `GET /api/deliveries` | `status`: `pending`, `assigned`, `picked_up`, `in_transit`, `delivered` o `cancelled` |
+| `GET /api/products`   | Siempre filtra por productos con stock                                   |
+
+- `page` (desde 1) y `limit` (10 por defecto, 100 como máximo). Por ejemplo: `GET /api/orders?status=delivered&page=2&limit=20`.
+- Los resultados vienen del más nuevo al más viejo, ordenados por `_id`, que siempre tiene índice.
+- La página y el total (`countDocuments`) se consultan en paralelo con el mismo filtro. Los campos que se filtran (`role` y `status`) tienen índice en MongoDB.
+- Un valor inválido (`limit=0`, `limit=500`, `page=abc`, `status=perdido`) responde `400 INVALID_QUERY_PARAM` con el nombre del parámetro, en vez de ignorarlo en silencio.
+
+La lógica está en dos lugares: `src/utils/list-query.js` lee y valida `page`, `limit` y los filtros, y `src/repositories/find-page.js` arma la consulta paginada que usan los cuatro repositories.
+
+### Otras decisiones de performance
+
+- **Payloads chicos:** los `populate` traen solo los campos que hacen falta (nombre y email del cliente, estado y total del pedido, nombre y rol del repartidor), la contraseña nunca sale y los productos se leen con `.lean()`.
+- **Event Loop:** no hay operaciones sincrónicas en `src/`. El manejo de archivos usa `fs/promises`, bcrypt se usa en su versión async y el contenido de los uploads se valida leyendo solo los primeros 12 bytes.
+- **Logs:** en producción el nivel por defecto es `info`, así que no se escribe una línea por cada request (`http`) ni el detalle de `debug`. El archivo guarda solo `error` y `fatal`, rota cada día o a los 20 MB y conserva 14 días.
+- **Uploads:** máximo 5 MB y un archivo por petición, solo PDF, JPEG, PNG y WEBP (validados también por su firma), errores del diccionario (`FILE_TOO_LARGE`, `INVALID_FILE_TYPE`, `FILE_REQUIRED` si llega vacío, etc.) y borrado del archivo si algo falla.
+
+### Docker
+
+La imagen usa `node:22-alpine`, instala solo las dependencias de producción con `npm ci --omit=dev`, corre con el usuario `node` (sin root), expone el puerto `8080` y arranca con `npm start`. Tiene un `HEALTHCHECK` que consulta `/api/health` cada 30 segundos.
+
+**Construir la imagen:**
+
+```bash
+docker build -t shipnow-api .
+```
+
+**Ejecutar el contenedor** pasándole las variables desde un archivo externo:
+
+```bash
+cp .env.production.example .env.production   # completá MONGODB_URI
+docker run -d --name shipnow-api -p 8080:8080 --env-file .env.production \
+  -v shipnow-uploads:/app/uploads -v shipnow-logs:/app/logs \
+  shipnow-api
+```
+
+Si MongoDB corre en tu propia máquina, desde el contenedor la URI es `mongodb://host.docker.internal:27017/shipnow`, porque `127.0.0.1` dentro del contenedor es el propio contenedor. Las variables también se pueden pasar una por una con `-e`, por ejemplo `-e NODE_ENV=production -e MONGODB_URI=...`.
+
+**Con Docker Compose (API + MongoDB):** si no tenés MongoDB, `docker-compose.yml` levanta la API y una base en otro contenedor, que no se publica fuera de la red de compose:
+
+```bash
+docker compose up --build    # API en http://localhost:8080, en producción (sin mocks ni loggerTest)
+docker compose down          # frena todo; los datos, uploads y logs quedan en los volúmenes
+docker compose down -v       # frena todo y borra también los volúmenes
+```
+
+Las variables del compose están fijas (`NODE_ENV=production`, `PORT=8080` y la URI del contenedor de Mongo) y no salen del `.env` de la carpeta, así siempre levanta igual.
+
+**Probarlo** con el contenedor andando:
+
+```bash
+curl http://localhost:8080/api/health
+curl -X POST http://localhost:8080/api/users -H "Content-Type: application/json" \
+  -d '{"firstName":"Ana","lastName":"Paz","email":"ana.paz@shipnow.test","password":"coder123"}'
+curl "http://localhost:8080/api/users?limit=5"
+```
+
+Swagger queda en `http://localhost:8080/api/docs`, y desde **Try it out** se puede probar todo, incluso subir archivos.
+
+**Puerto:** la API escucha en `PORT`, que por defecto es `8080`. Si lo cambiás, publicá el mismo en `docker run -p <puerto>:<puerto>`.
+
+**Qué no entra en la imagen** (`.dockerignore`): `node_modules` (se instala adentro), `.env` y todos los `.env.*`, `.git`, `logs`, `uploads`, `uploads-test`, `coverage`, archivos temporales, los tests y los archivos de Docker.
+
+### Qué no se sube al repositorio
+
+`node_modules/`, `.env`, `.env.test`, `.env.production` (solo se suben las plantillas `*.example`), `logs/` (salvo `logs/.gitkeep`), `*.log`, `uploads/` y `uploads-test/`. Está todo en `.gitignore`.
+
+### Logs y uploads
+
+- **Logs:** la consola es la salida principal y en Docker se lee con `docker logs shipnow-api`. Además, `error` y `fatal` quedan en `logs/error-<fecha>.log`, que dentro del contenedor es `/app/logs`. Con el volumen `shipnow-logs` esos archivos sobreviven si se borra el contenedor.
+- **Uploads:** los archivos se guardan en el disco del servidor (`uploads/documents`, `uploads/licenses` y `uploads/proofs`) y en MongoDB quedan solo los metadatos. Dentro del contenedor es `/app/uploads`, **montado en un volumen** para que no se pierdan al recrear el contenedor. Es almacenamiento local de una sola instancia: si la API escalara a varias réplicas, el paso siguiente sería un storage de objetos (S3, Cloudinary, etc.) compartido entre todas.
+
+### Endpoints internos en producción
+
+Criterio: **en producción solo queda lo que necesita un cliente real o el monitoreo.** Lo que carga datos falsos o genera logs falsos se apaga.
+
+| Endpoint          | `development` / `test` | `production`                          | Por qué |
+| ----------------- | ---------------------- | ------------------------------------- | ------- |
+| `/api/mocks`      | Sí                     | No, responde `404 ROUTE_NOT_FOUND`    | Genera datos falsos y los escribe en la base real |
+| `/api/loggerTest` | Sí                     | No, responde `404 ROUTE_NOT_FOUND`    | Escribe errores y fatales falsos en los logs y ensucia el monitoreo |
+| `/api/docs`       | Sí, completa           | Sí, solo los endpoints de negocio y Health | Documenta el contrato público de la API y no expone datos. No muestra Mocks ni Logger porque en producción no existen |
+| `/api/health`     | Sí                     | Sí                                    | Lo usan el `HEALTHCHECK` de Docker y cualquier monitoreo externo |
+
+Además, en producción los errores no traen `details`, así que no se filtran stacks ni datos internos. Las rutas se montan según `config.isProduction` en `src/app.js` y Swagger arma la documentación con el mismo criterio en `src/docs/swagger.config.js`.

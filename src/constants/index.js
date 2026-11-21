@@ -62,6 +62,10 @@ export const DOCUMENT_FOLDERS = {
 
 export const MAX_UPLOAD_SIZE_MB = 5;
 
+// Paginación de los listados (?page y ?limit).
+export const DEFAULT_PAGE_LIMIT = 10;
+export const MAX_PAGE_LIMIT = 100;
+
 export const MAX_MOCK_ITEMS = 100;
 export const DEFAULT_MOCK_QTY = 10;
 export const MOCK_USER_PASSWORD = 'coder123';

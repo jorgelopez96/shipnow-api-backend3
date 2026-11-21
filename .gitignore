@@ -1,5 +1,6 @@
 .env
-.env.test
+.env.*
+!.env*.example
 node_modules
 logs/*
 !logs/.gitkeep

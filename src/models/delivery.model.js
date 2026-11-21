@@ -5,7 +5,7 @@ const deliverySchema = new Schema(
   {
     order: { type: Schema.Types.ObjectId, ref: 'Order', required: true },
     driver: { type: Schema.Types.ObjectId, ref: 'User' },
-    status: { type: String, enum: Object.values(DELIVERY_STATUS), default: DELIVERY_STATUS.PENDING },
+    status: { type: String, enum: Object.values(DELIVERY_STATUS), default: DELIVERY_STATUS.PENDING, index: true },
     priority: { type: String, enum: Object.values(DELIVERY_PRIORITY), default: DELIVERY_PRIORITY.NORMAL },
   },
   { timestamps: true }

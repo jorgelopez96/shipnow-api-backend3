@@ -1,6 +1,7 @@
 import { PRODUCT_STATUS } from '../constants/index.js';
 import { AppError } from '../errors/app-error.js';
 import { productsRepository } from '../repositories/products.repository.js';
+import { readPagination } from '../utils/list-query.js';
 import { pickFields } from '../utils/pick-fields.js';
 
 const EDITABLE_FIELDS = ['title', 'description', 'code', 'price', 'stock', 'category'];
@@ -15,7 +16,7 @@ const ensureFound = (product) => {
 };
 
 export const productsService = {
-  getAvailable: () => productsRepository.findAll({ status: PRODUCT_STATUS.AVAILABLE }),
+  getAvailable: (query) => productsRepository.findPage({ status: PRODUCT_STATUS.AVAILABLE }, readPagination(query)),
 
   async getById(id) {
     const product = ensureFound(await productsRepository.findById(id));

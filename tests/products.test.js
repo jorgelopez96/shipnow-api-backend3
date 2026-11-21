@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import request from 'supertest';
 import app from '../src/app.js';
 import { ProductModel } from '../src/models/product.model.js';
-import { expectError, expectSuccess, INVALID_ID, newId } from './helpers.js';
+import { expectError, expectPage, expectSuccess, INVALID_ID, newId } from './helpers.js';
 
 const validProduct = (data = {}) => ({
   title: 'Caja mediana',
@@ -26,10 +26,18 @@ describe('Products API', () => {
       await createdOn('2026-01-02', { code: 'SIN-STOCK', stock: 0, status: 'out_of_stock' });
       await createdOn('2026-01-03', { code: 'NUEVO' });
 
-      const products = expectSuccess(await request(app).get('/api/products'));
+      const products = expectPage(await request(app).get('/api/products'), { page: 1, limit: 10, total: 2, totalPages: 1 });
 
       expect(products.map((product) => product.code)).to.deep.equal(['NUEVO', 'VIEJO']);
       expect(products.every((product) => product.status === 'available')).to.equal(true);
+    });
+
+    it('debería paginar el catálogo con limit', async () => {
+      await createProduct({ code: 'A' });
+      await createProduct({ code: 'B' });
+
+      const products = expectPage(await request(app).get('/api/products?limit=1&page=2'), { page: 2, limit: 1, total: 2, totalPages: 2 });
+      expect(products.map((product) => product.code)).to.deep.equal(['A']);
     });
   });
 

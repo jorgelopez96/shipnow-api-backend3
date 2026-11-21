@@ -5,14 +5,20 @@ paths:
       description: |
         Devuelve el catálogo que se puede vender: solo los productos con stock (`status = available`),
         del más nuevo al más viejo. Los productos sin stock no aparecen.
+        La respuesta está paginada (`page` y `limit`, 10 por defecto y 100 como máximo).
       tags: [Products]
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
       responses:
         "200":
-          description: Lista de productos disponibles (vacía si no hay ninguno con stock)
+          description: Página de productos disponibles (vacía si no hay ninguno con stock)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductListResponse'
+        "400":
+          $ref: '#/components/responses/InvalidQueryParam'
         "500":
           $ref: '#/components/responses/InternalError'
     post:

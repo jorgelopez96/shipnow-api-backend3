@@ -3,16 +3,29 @@ paths:
     get:
       summary: Listar pedidos
       description: |
-        Devuelve todos los pedidos con su estado, prioridad, items, total y comprobante de entrega (si tienen).
+        Devuelve los pedidos con su estado, prioridad, items, total y comprobante de entrega (si tienen), del más nuevo al más viejo.
+        La respuesta está paginada (`page` y `limit`, 10 por defecto y 100 como máximo) y se puede filtrar por `status`.
         Cada pedido trae el cliente populado (nombre, apellido y email) para no tener que buscarlo aparte.
       tags: [Orders]
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - name: status
+          in: query
+          required: false
+          description: Filtra por estado del pedido
+          schema:
+            type: string
+            enum: [created, assigned, picked_up, in_transit, delivered, cancelled]
       responses:
         "200":
-          description: Lista de pedidos (vacía si no hay ninguno)
+          description: Página de pedidos (vacía si no hay ninguno)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderListResponse'
+        "400":
+          $ref: '#/components/responses/InvalidQueryParam'
         "500":
           $ref: '#/components/responses/InternalError'
     post:
@@ -254,7 +267,7 @@ components:
             details: 'Estado actual: delivered'
     InvalidProofUpload:
       description: |
-        Falta el archivo (`FILE_REQUIRED`), llegó en otro campo o más de uno (`UNEXPECTED_FILE_FIELD`),
+        Falta el archivo o llegó vacío (`FILE_REQUIRED`), llegó en otro campo o más de uno (`UNEXPECTED_FILE_FIELD`),
         ID inválido (`INVALID_ID`) o formulario mal armado (`VALIDATION_ERROR`)
       content:
         application/json:

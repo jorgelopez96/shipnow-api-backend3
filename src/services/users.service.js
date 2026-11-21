@@ -3,6 +3,7 @@ import { AppError } from '../errors/app-error.js';
 import { logger } from '../logger/index.js';
 import { usersRepository } from '../repositories/users.repository.js';
 import { hashPassword } from '../utils/password.js';
+import { readEnumFilter, readPagination } from '../utils/list-query.js';
 import { pickFields } from '../utils/pick-fields.js';
 import { removeFile, storeFile, withUploadedFile } from '../utils/uploaded-files.js';
 
@@ -28,7 +29,7 @@ const ensureFound = (user) => {
 };
 
 export const usersService = {
-  getAll: () => usersRepository.findAll(),
+  getAll: (query) => usersRepository.findPage(readEnumFilter(query, 'role', Object.values(USER_ROLES)), readPagination(query)),
 
   getById: async (id) => ensureFound(await usersRepository.findById(id)),
 

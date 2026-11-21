@@ -1,7 +1,6 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import app from '../src/app.js';
-import { config } from '../src/config/index.js';
 import { swaggerSpecs } from '../src/docs/swagger.config.js';
 import { newId } from './helpers.js';
 
@@ -31,11 +30,10 @@ describe('Swagger', () => {
     it('debería tener la información general de la API', () => {
       expect(swaggerSpecs.openapi).to.equal('3.0.0');
       expect(swaggerSpecs.info).to.include({ title: 'ShipNow API', version: '1.0.0' });
-      expect(swaggerSpecs.servers[0].url).to.match(/^http:\/\/localhost:\d+$/);
     });
 
     it('debería agrupar los endpoints por tags, incluidos Mocks y Logger fuera de producción', () => {
-      expect(swaggerSpecs.tags.map((tag) => tag.name)).to.deep.equal(['Users', 'Products', 'Orders', 'Deliveries', 'Mocks', 'Logger']);
+      expect(swaggerSpecs.tags.map((tag) => tag.name)).to.deep.equal(['Users', 'Products', 'Orders', 'Deliveries', 'Health', 'Mocks', 'Logger']);
       documentedOperations.forEach(({ method, path }) => {
         expect(swaggerSpecs.paths[path][method].tags, `${method} ${path}`).to.have.lengthOf(1);
       });
@@ -68,8 +66,15 @@ describe('Swagger', () => {
       expect(inline).to.deep.equal([]);
     });
 
-    it('debería apuntar el server al puerto configurado', () => {
-      expect(swaggerSpecs.servers[0].url).to.equal(`http://localhost:${config.port}`);
+    it('debería usar un server relativo, para que Try it out funcione en cualquier host y puerto', () => {
+      expect(swaggerSpecs.servers).to.deep.equal([{ url: '/', description: 'Este servidor' }]);
+    });
+
+    it('debería documentar page y limit en todos los listados', () => {
+      for (const path of ['/api/users', '/api/products', '/api/orders', '/api/deliveries']) {
+        const refs = swaggerSpecs.paths[path].get.parameters.map((parameter) => parameter.$ref);
+        expect(refs, path).to.include.members(['#/components/parameters/page', '#/components/parameters/limit']);
+      }
     });
 
     it('no debería tener referencias ($ref) rotas', () => {

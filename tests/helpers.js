@@ -43,6 +43,17 @@ export const expectSuccess = (res, statusCode = 200) => {
   return res.body.payload;
 };
 
+// Listados paginados: { status, payload, pagination }. Devuelve el payload; si se pasa `pagination`, también la compara.
+export const expectPage = (res, pagination) => {
+  expect(res.status).to.equal(200);
+  expect(res.body).to.have.all.keys('status', 'payload', 'pagination');
+  expect(res.body.status).to.equal('success');
+  expect(res.body.payload).to.be.an('array');
+  expect(res.body.pagination).to.have.all.keys('page', 'limit', 'total', 'totalPages');
+  if (pagination) expect(res.body.pagination).to.deep.equal(pagination);
+  return res.body.payload;
+};
+
 // Valida el formato del middleware de errores: { status, statusCode, error, message, details? }.
 // Si no se pasa un mensaje, se espera el del diccionario de errores.
 export const expectError = (res, statusCode, code, message = ERRORS[code].message) => {

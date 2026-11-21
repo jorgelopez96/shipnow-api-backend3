@@ -1,0 +1,27 @@
+# Dependencias: se instalan dentro de la imagen con npm ci
+node_modules
+
+# Variables de entorno: llegan al contenedor con --env-file o desde el entorno, nunca dentro de la imagen
+.env
+.env.*
+
+# Repositorio y archivos generados
+.git
+.gitignore
+logs
+uploads
+uploads-test
+coverage
+.nyc_output
+tmp
+*.tmp
+*.log
+
+# Solo hacen falta para desarrollar y testear
+tests
+.mocharc.json
+.vscode
+.idea
+Dockerfile
+.dockerignore
+docker-compose.yml

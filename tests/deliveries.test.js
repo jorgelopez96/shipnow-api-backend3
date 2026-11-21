@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import request from 'supertest';
 import app from '../src/app.js';
 import { DeliveryModel } from '../src/models/delivery.model.js';
-import { createDriver, createOrder, createUser, expectError, expectSuccess, INVALID_ID, newId } from './helpers.js';
+import { createDriver, createOrder, createUser, expectError, expectPage, expectSuccess, INVALID_ID, newId } from './helpers.js';
 
 describe('Deliveries API', () => {
   let order;
@@ -18,7 +18,7 @@ describe('Deliveries API', () => {
     it('debería listar las entregas con el pedido y el repartidor populados', async () => {
       await DeliveryModel.create({ order: order._id, driver: driver._id, status: 'assigned' });
 
-      const [delivery, ...rest] = expectSuccess(await request(app).get('/api/deliveries'));
+      const [delivery, ...rest] = expectPage(await request(app).get('/api/deliveries'), { page: 1, limit: 10, total: 1, totalPages: 1 });
 
       expect(rest).to.have.lengthOf(0);
       expect(delivery.order).to.deep.equal({ _id: String(order._id), status: order.status, total: order.total });
@@ -29,6 +29,18 @@ describe('Deliveries API', () => {
         role: 'driver',
       });
       expect(delivery).to.include({ status: 'assigned' });
+    });
+
+    it('debería filtrar por status', async () => {
+      await DeliveryModel.create({ order: order._id, driver: driver._id, status: 'assigned' });
+      const pending = await DeliveryModel.create({ order: order._id });
+
+      const deliveries = expectPage(await request(app).get('/api/deliveries?status=pending'), { page: 1, limit: 10, total: 1, totalPages: 1 });
+      expect(deliveries.map((delivery) => delivery._id)).to.deep.equal([String(pending._id)]);
+    });
+
+    it('debería responder 400 INVALID_QUERY_PARAM si el status no existe', async () => {
+      expectError(await request(app).get('/api/deliveries?status=perdida'), 400, 'INVALID_QUERY_PARAM', 'El parámetro "status" no es válido');
     });
   });
 

@@ -38,6 +38,7 @@ export const removeFile = (filePath) =>
 export const withUploadedFile = async (file, operation) => {
   if (!file) throw new AppError('FILE_REQUIRED');
   try {
+    if (file.size === 0) throw new AppError('FILE_REQUIRED', { message: 'El archivo llegó vacío' });
     return await operation();
   } catch (error) {
     await removeFile(file.path);

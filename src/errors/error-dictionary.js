@@ -4,6 +4,7 @@ export const ERRORS = Object.freeze({
   VALIDATION_ERROR: defineError(400, 'Los datos enviados no son válidos'),
   INVALID_ID: defineError(400, 'El ID enviado no tiene un formato válido'),
   INVALID_JSON: defineError(400, 'El body no es un JSON válido'),
+  INVALID_QUERY_PARAM: defineError(400, 'Algún parámetro de la consulta no es válido'),
   ROUTE_NOT_FOUND: defineError(404, 'La ruta solicitada no existe'),
   DUPLICATE_VALUE: defineError(409, 'Ya existe un registro con ese valor'),
 

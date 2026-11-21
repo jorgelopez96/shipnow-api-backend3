@@ -1,10 +1,10 @@
 import { productsService } from '../services/products.service.js';
-import { sendSuccess } from '../utils/send-success.js';
+import { sendPage, sendSuccess } from '../utils/send-success.js';
 
 export const productsController = {
   async getAll(req, res, next) {
     try {
-      sendSuccess(res, await productsService.getAvailable());
+      sendPage(res, await productsService.getAvailable(req.query));
     } catch (error) {
       next(error);
     }

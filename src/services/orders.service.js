@@ -3,13 +3,14 @@ import { AppError } from '../errors/app-error.js';
 import { logger } from '../logger/index.js';
 import { ordersRepository } from '../repositories/orders.repository.js';
 import { usersRepository } from '../repositories/users.repository.js';
+import { readEnumFilter, readPagination } from '../utils/list-query.js';
 import { calculateOrderTotal } from '../utils/order-total.js';
 import { removeFile, storeFile, withUploadedFile } from '../utils/uploaded-files.js';
 
 const CLOSED_STATUSES = [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED];
 
 export const ordersService = {
-  getAll: () => ordersRepository.findAll(),
+  getAll: (query) => ordersRepository.findPage(readEnumFilter(query, 'status', Object.values(ORDER_STATUS)), readPagination(query)),
 
   async getById(id) {
     const order = await ordersRepository.findById(id);

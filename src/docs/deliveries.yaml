@@ -3,16 +3,29 @@ paths:
     get:
       summary: Listar entregas
       description: |
-        Devuelve todas las entregas con su estado y prioridad.
+        Devuelve las entregas con su estado y prioridad, de la más nueva a la más vieja.
+        La respuesta está paginada (`page` y `limit`, 10 por defecto y 100 como máximo) y se puede filtrar por `status`.
         Cada una trae el pedido (estado y total) y el repartidor (nombre y rol) populados; las pendientes no tienen repartidor.
       tags: [Deliveries]
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - name: status
+          in: query
+          required: false
+          description: Filtra por estado de la entrega
+          schema:
+            type: string
+            enum: [pending, assigned, picked_up, in_transit, delivered, cancelled]
       responses:
         "200":
-          description: Lista de entregas (vacía si no hay ninguna)
+          description: Página de entregas (vacía si no hay ninguna)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeliveryListResponse'
+        "400":
+          $ref: '#/components/responses/InvalidQueryParam'
         "500":
           $ref: '#/components/responses/InternalError'
     post:

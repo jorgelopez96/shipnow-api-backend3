@@ -1,10 +1,10 @@
 import { usersService } from '../services/users.service.js';
-import { sendSuccess } from '../utils/send-success.js';
+import { sendPage, sendSuccess } from '../utils/send-success.js';
 
 export const usersController = {
   async getAll(req, res, next) {
     try {
-      sendSuccess(res, await usersService.getAll());
+      sendPage(res, await usersService.getAll(req.query));
     } catch (error) {
       next(error);
     }

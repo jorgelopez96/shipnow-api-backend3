@@ -20,7 +20,7 @@ const orderSchema = new Schema(
     },
     deliveryAddress: { type: String, required: true, trim: true },
     total: { type: Number, required: true, min: 0 },
-    status: { type: String, enum: Object.values(ORDER_STATUS), default: ORDER_STATUS.CREATED },
+    status: { type: String, enum: Object.values(ORDER_STATUS), default: ORDER_STATUS.CREATED, index: true },
     priority: { type: String, enum: Object.values(DELIVERY_PRIORITY), default: DELIVERY_PRIORITY.NORMAL },
     proof: { type: fileSchema },
   },

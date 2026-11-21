@@ -8,6 +8,7 @@ import {
   createOrder,
   createUser,
   expectError,
+  expectPage,
   expectSuccess,
   fileExists,
   filesIn,
@@ -40,9 +41,9 @@ describe('Orders API', () => {
       await createOrder(customer._id);
       await createOrder(customer._id);
 
-      const orders = expectSuccess(await request(app).get('/api/orders'));
+      const orders = expectPage(await request(app).get('/api/orders'), { page: 1, limit: 10, total: 2, totalPages: 1 });
 
-      expect(orders).to.be.an('array').with.lengthOf(2);
+      expect(orders).to.have.lengthOf(2);
       for (const order of orders) {
         expect(order).to.include.all.keys('_id', 'customer', 'items', 'deliveryAddress', 'total', 'status', 'priority');
         expect(order.customer).to.deep.equal({
@@ -52,6 +53,20 @@ describe('Orders API', () => {
           email: customer.email,
         });
       }
+    });
+
+    it('debería filtrar por status y paginar el resultado', async () => {
+      await createOrder(customer._id);
+      await createOrder(customer._id, { status: ORDER_STATUS.DELIVERED });
+      await createOrder(customer._id, { status: ORDER_STATUS.DELIVERED });
+
+      const res = await request(app).get('/api/orders?status=delivered&limit=1');
+      const orders = expectPage(res, { page: 1, limit: 1, total: 2, totalPages: 2 });
+      expect(orders[0].status).to.equal(ORDER_STATUS.DELIVERED);
+    });
+
+    it('debería responder 400 INVALID_QUERY_PARAM si el status no existe', async () => {
+      expectError(await request(app).get('/api/orders?status=perdido'), 400, 'INVALID_QUERY_PARAM', 'El parámetro "status" no es válido');
     });
   });
 

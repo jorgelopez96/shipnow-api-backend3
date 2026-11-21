@@ -1,0 +1,39 @@
+paths:
+  /api/health:
+    get:
+      summary: Estado de la API
+      description: |
+        Health check para monitoreo (por ejemplo, el `HEALTHCHECK` del contenedor de Docker).
+        Devuelve si la API está viva, el entorno, cuántos segundos lleva levantada, la hora del servidor
+        y si hay conexión con MongoDB. No expone versiones, URIs, rutas ni variables de entorno.
+      tags: [Health]
+      responses:
+        "200":
+          description: La API está levantada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessResponse'
+                  - properties:
+                      payload:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: ok
+                          environment:
+                            type: string
+                            enum: [development, production, test]
+                            example: production
+                          uptime:
+                            type: integer
+                            description: Segundos desde que arrancó el proceso
+                            example: 3600
+                          timestamp:
+                            type: string
+                            format: date-time
+                          database:
+                            type: string
+                            enum: [connected, disconnected]
+                            example: connected

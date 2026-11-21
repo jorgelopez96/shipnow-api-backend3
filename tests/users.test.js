@@ -7,6 +7,7 @@ import {
   createDriver,
   createUser,
   expectError,
+  expectPage,
   expectSuccess,
   fileExists,
   filesIn,
@@ -24,9 +25,9 @@ describe('Users API', () => {
       await createUser();
       await createDriver();
 
-      const users = expectSuccess(await request(app).get('/api/users'));
+      const users = expectPage(await request(app).get('/api/users'), { page: 1, limit: 10, total: 2, totalPages: 1 });
 
-      expect(users).to.be.an('array').with.lengthOf(2);
+      expect(users).to.have.lengthOf(2);
       for (const user of users) {
         expect(user).to.include.all.keys('_id', 'firstName', 'lastName', 'email', 'role');
         expect(user).to.not.have.property('password');
@@ -34,8 +35,56 @@ describe('Users API', () => {
     });
 
     it('debería devolver una lista vacía si no hay usuarios', async () => {
-      expect(expectSuccess(await request(app).get('/api/users'))).to.deep.equal([]);
+      const res = await request(app).get('/api/users');
+      expect(expectPage(res, { page: 1, limit: 10, total: 0, totalPages: 0 })).to.deep.equal([]);
     });
+
+    it('debería devolver como máximo 10 usuarios si no se indica limit', async () => {
+      for (let i = 0; i < 12; i++) await createUser();
+      const users = expectPage(await request(app).get('/api/users'), { page: 1, limit: 10, total: 12, totalPages: 2 });
+      expect(users).to.have.lengthOf(10);
+    });
+
+    it('debería paginar con page y limit, del más nuevo al más viejo', async () => {
+      const created = [];
+      for (let i = 0; i < 5; i++) created.push(await createUser());
+      const ids = created.map((user) => String(user._id)).reverse();
+
+      const first = expectPage(await request(app).get('/api/users?page=1&limit=2'), { page: 1, limit: 2, total: 5, totalPages: 3 });
+      const last = expectPage(await request(app).get('/api/users?page=3&limit=2'), { page: 3, limit: 2, total: 5, totalPages: 3 });
+
+      expect(first.map((user) => user._id)).to.deep.equal(ids.slice(0, 2));
+      expect(last.map((user) => user._id)).to.deep.equal(ids.slice(4));
+    });
+
+    it('debería devolver una página vacía si page supera el total de páginas', async () => {
+      await createUser();
+      const res = await request(app).get('/api/users?page=5');
+      expect(expectPage(res, { page: 5, limit: 10, total: 1, totalPages: 1 })).to.deep.equal([]);
+    });
+
+    it('debería filtrar por role y contar solo los que cumplen el filtro', async () => {
+      await createUser();
+      const driver = await createDriver();
+
+      const users = expectPage(await request(app).get('/api/users?role=driver'), { page: 1, limit: 10, total: 1, totalPages: 1 });
+      expect(users.map((user) => user._id)).to.deep.equal([String(driver._id)]);
+    });
+
+    for (const [query, param] of [
+      ['limit=0', 'limit'],
+      ['limit=101', 'limit'],
+      ['limit=2.5', 'limit'],
+      ['page=abc', 'page'],
+      ['page=-1', 'page'],
+      ['role=pirata', 'role'],
+    ]) {
+      it(`debería responder 400 INVALID_QUERY_PARAM con ?${query}`, async () => {
+        const res = await request(app).get(`/api/users?${query}`);
+        expectError(res, 400, 'INVALID_QUERY_PARAM', `El parámetro "${param}" no es válido`);
+        expect(res.body.details).to.be.a('string').that.is.not.empty;
+      });
+    }
   });
 
   describe('POST /api/users', () => {
@@ -157,6 +206,17 @@ describe('Users API', () => {
       expect(await filesIn('tmp')).to.deep.equal([]);
       expect(await filesIn('documents')).to.deep.equal([]);
     };
+
+    it('debería responder 400 FILE_REQUIRED si el archivo llega vacío y no dejarlo en el servidor', async () => {
+      const created = await createUser();
+      const res = await upload(created._id)
+        .field('type', 'user_document')
+        .attach('document', Buffer.alloc(0), { filename: 'vacio.pdf', contentType: 'application/pdf' });
+
+      expectError(res, 400, 'FILE_REQUIRED', 'El archivo llegó vacío');
+      await expectNoFilesLeft();
+      expect((await UserModel.findById(created._id)).documents).to.have.lengthOf(0);
+    });
 
     it('debería guardar el archivo en uploads/documents y registrar sus metadatos en el usuario', async () => {
       const created = await createUser();

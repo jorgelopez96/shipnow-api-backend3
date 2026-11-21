@@ -3,16 +3,29 @@ paths:
     get:
       summary: Listar usuarios
       description: |
-        Devuelve todos los usuarios registrados, de cualquier rol (clientes, repartidores, comercios y administradores),
-        con sus documentos cargados. La contraseña nunca viene en la respuesta.
+        Devuelve los usuarios registrados, de cualquier rol (clientes, repartidores, comercios y administradores),
+        con sus documentos cargados, del más nuevo al más viejo. La contraseña nunca viene en la respuesta.
+        La respuesta está paginada (`page` y `limit`, 10 por defecto y 100 como máximo) y se puede filtrar por `role`.
       tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - name: role
+          in: query
+          required: false
+          description: Filtra por rol
+          schema:
+            type: string
+            enum: [admin, customer, driver, store]
       responses:
         "200":
-          description: Lista de usuarios (vacía si no hay ninguno)
+          description: Página de usuarios (vacía si no hay ninguno)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserListResponse'
+        "400":
+          $ref: '#/components/responses/InvalidQueryParam'
         "500":
           $ref: '#/components/responses/InternalError'
     post:
@@ -236,7 +249,7 @@ components:
                 message: El body no es un JSON válido
     InvalidUserDocument:
       description: |
-        Falta el archivo (`FILE_REQUIRED`), llegó en otro campo o más de uno (`UNEXPECTED_FILE_FIELD`),
+        Falta el archivo o llegó vacío (`FILE_REQUIRED`), llegó en otro campo o más de uno (`UNEXPECTED_FILE_FIELD`),
         el tipo de documento no es válido o es una licencia de alguien que no es repartidor (`INVALID_DOCUMENT_TYPE`),
         ID inválido (`INVALID_ID`) o formulario mal armado (`VALIDATION_ERROR`)
       content:
