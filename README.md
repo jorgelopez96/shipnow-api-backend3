@@ -408,7 +408,7 @@ Ninguna ruta ni controller responde errores por su cuenta. Cada capa detecta el 
 - `message`: explicación para el cliente.
 - `details`: información extra para depurar. Solo aparece si `NODE_ENV` no es `production`.
 
-El middleware también traduce los errores que no son `AppError`: validaciones de Mongoose (`VALIDATION_ERROR`), IDs mal formados (`INVALID_ID`), JSON roto (`INVALID_JSON`), claves duplicadas (`DUPLICATE_VALUE`) y fallas de MongoDB (`DATABASE_ERROR`). Cualquier otro error inesperado responde `INTERNAL_SERVER_ERROR` sin exponer detalles internos. El middleware es también el único lugar donde se loguean los errores de los requests (ver [Logging](#logging)).
+El middleware también traduce los errores que no son `AppError`: validaciones de Mongoose (`VALIDATION_ERROR`), IDs mal formados (`INVALID_ID`), JSON roto (`INVALID_JSON`), bodies de más de 100 KB (`PAYLOAD_TOO_LARGE`), claves duplicadas (`DUPLICATE_VALUE`) y fallas de MongoDB (`DATABASE_ERROR`). Cualquier otro error inesperado responde `INTERNAL_SERVER_ERROR` sin exponer detalles internos. El middleware es también el único lugar donde se loguean los errores de los requests (ver [Logging](#logging)).
 
 ### Diccionario de errores
 
@@ -420,6 +420,7 @@ Está en `src/errors/error-dictionary.js`.
 | `INVALID_ID`                | 400  | El ID no tiene formato de ObjectId                                   |
 | `INVALID_JSON`              | 400  | El body no es un JSON válido                                         |
 | `INVALID_QUERY_PARAM`       | 400  | `page`, `limit` o un filtro de un listado no son válidos             |
+| `PAYLOAD_TOO_LARGE`         | 413  | El body JSON pesa más de 100 KB                                      |
 | `ROUTE_NOT_FOUND`           | 404  | La ruta no existe                                                    |
 | `DUPLICATE_VALUE`           | 409  | Se viola un índice único (por ejemplo, el `code` de un producto)     |
 | `USER_NOT_FOUND`            | 404  | El usuario (o el cliente del pedido) no existe                       |
@@ -445,6 +446,7 @@ Está en `src/errors/error-dictionary.js`.
 | `MOCK_DEPENDENCIES_MISSING` | 400  | Se piden pedidos sin usuarios, o entregas sin pedidos o repartidores |
 | `MOCK_GENERATION_ERROR`     | 500  | Falló la carga en MongoDB. Se deshace lo insertado                   |
 | `DATABASE_ERROR`            | 500  | MongoDB no responde                                                  |
+| `DATABASE_UNAVAILABLE`      | 503  | El health check no tiene conexión con MongoDB                        |
 | `INTERNAL_SERVER_ERROR`     | 500  | Error inesperado                                                     |
 
 ### Cómo probar los casos inválidos
@@ -740,6 +742,8 @@ Necesitan un MongoDB corriendo (ver [Testing](#testing)). Usan su propia base, `
 
 El health check devuelve solo el estado de la API, el entorno, los segundos que lleva levantada, la hora del servidor y si hay conexión con MongoDB. No muestra versiones, URIs, rutas del servidor ni variables de entorno, y la app no manda el header `X-Powered-By`. Lo usa el `HEALTHCHECK` de la imagen.
 
+Si se cae la conexión con MongoDB responde `503 DATABASE_UNAVAILABLE` en lugar de `200`, así el `HEALTHCHECK` de Docker (y cualquier monitoreo externo) detecta que la API no puede atender pedidos aunque el proceso siga vivo.
+
 ### Paginación y filtros
 
 Ningún listado devuelve la colección completa:
@@ -763,6 +767,7 @@ La lógica está en dos lugares: `src/utils/list-query.js` lee y valida `page`, 
 - **Payloads chicos:** los `populate` traen solo los campos que hacen falta (nombre y email del cliente, estado y total del pedido, nombre y rol del repartidor), la contraseña nunca sale y los productos se leen con `.lean()`.
 - **Event Loop:** no hay operaciones sincrónicas en `src/`. El manejo de archivos usa `fs/promises`, bcrypt se usa en su versión async y el contenido de los uploads se valida leyendo solo los primeros 12 bytes.
 - **Logs:** en producción el nivel por defecto es `info`, así que no se escribe una línea por cada request (`http`) ni el detalle de `debug`. El archivo guarda solo `error` y `fatal`, rota cada día o a los 20 MB y conserva 14 días.
+- **Body JSON:** máximo 100 KB (`express.json({ limit: '100kb' })`). Uno más grande responde `413 PAYLOAD_TOO_LARGE` sin llegar a los controllers.
 - **Uploads:** máximo 5 MB y un archivo por petición, solo PDF, JPEG, PNG y WEBP (validados también por su firma), errores del diccionario (`FILE_TOO_LARGE`, `INVALID_FILE_TYPE`, `FILE_REQUIRED` si llega vacío, etc.) y borrado del archivo si algo falla.
 
 ### Docker

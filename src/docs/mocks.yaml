@@ -145,6 +145,8 @@ paths:
           $ref: '#/components/responses/SeedCreated'
         "400":
           $ref: '#/components/responses/InvalidSeedCounts'
+        "413":
+          $ref: '#/components/responses/PayloadTooLarge'
         "500":
           $ref: '#/components/responses/SeedFailed'
   /api/mocks/seed:
@@ -172,6 +174,8 @@ paths:
           $ref: '#/components/responses/SeedCreated'
         "400":
           $ref: '#/components/responses/InvalidSeedCounts'
+        "413":
+          $ref: '#/components/responses/PayloadTooLarge'
         "500":
           $ref: '#/components/responses/SeedFailed'
 

@@ -122,6 +122,13 @@ describe('Users API', () => {
       const res = await request(app).post('/api/users').set('Content-Type', 'application/json').send('{"firstName":');
       expectError(res, 400, 'INVALID_JSON');
     });
+
+    it('debería responder 413 PAYLOAD_TOO_LARGE si el body JSON pesa más de 100 KB', async () => {
+      const res = await request(app).post('/api/users').send({ ...validUser(), firstName: 'a'.repeat(200 * 1024) });
+      expectError(res, 413, 'PAYLOAD_TOO_LARGE');
+      expect(res.body.details).to.equal('Máximo: 100 KB');
+      expect(await UserModel.countDocuments()).to.equal(0);
+    });
   });
 
   describe('GET /api/users/:id', () => {

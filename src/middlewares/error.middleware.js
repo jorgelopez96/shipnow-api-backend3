@@ -25,6 +25,9 @@ const toAppError = (err) => {
     return new AppError('DUPLICATE_VALUE', { details: `Campos: ${Object.keys(err.keyValue ?? {}).join(', ')}` });
   }
   if (err.type === 'entity.parse.failed') return new AppError('INVALID_JSON');
+  if (err.type === 'entity.too.large') {
+    return new AppError('PAYLOAD_TOO_LARGE', { details: `Máximo: ${Math.round(err.limit / 1024)} KB` });
+  }
   if (err.name?.startsWith('Mongo')) return new AppError('DATABASE_ERROR', { details: err.message, cause: err });
 
   return new AppError('INTERNAL_SERVER_ERROR', { details: err.message, cause: err });
@@ -36,7 +39,12 @@ const logRequestError = (error, req) => {
     logger.warning(summary);
     return;
   }
-  logger.error(summary, { details: error.details, stack: (error.cause ?? error).stack });
+  // Sin cause es un error esperado (como DATABASE_UNAVAILABLE): el stack no aporta y llenaría el archivo en cada health check.
+  if (!error.cause) {
+    logger.error(summary);
+    return;
+  }
+  logger.error(summary, { details: error.details, stack: error.cause.stack });
 };
 
 export const notFoundHandler = (req, res, next) => {

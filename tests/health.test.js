@@ -1,8 +1,9 @@
 import { expect } from 'chai';
+import mongoose from 'mongoose';
 import request from 'supertest';
 import app from '../src/app.js';
 import { config } from '../src/config/index.js';
-import { expectSuccess } from './helpers.js';
+import { expectError, expectSuccess } from './helpers.js';
 
 describe('Health check', () => {
   describe('GET /api/health', () => {
@@ -22,6 +23,17 @@ describe('Health check', () => {
       expect(body).to.not.include(config.mongoUri);
       expect(body).to.not.match(/mongodb|password|version|node_modules/i);
       expect(res.headers).to.not.have.property('x-powered-by');
+    });
+
+    it('debería responder 503 DATABASE_UNAVAILABLE si no hay conexión con MongoDB', async () => {
+      // Simula la caída sin cortar la conexión real que usa el resto de la suite.
+      Object.defineProperty(mongoose.connection, 'readyState', { get: () => 0, configurable: true });
+      try {
+        expectError(await request(app).get('/api/health'), 503, 'DATABASE_UNAVAILABLE');
+      } finally {
+        delete mongoose.connection.readyState;
+      }
+      expect(mongoose.connection.readyState).to.equal(1);
     });
   });
 });

@@ -466,6 +466,29 @@ components:
             error: FILE_TOO_LARGE
             message: El archivo supera el tamaño máximo permitido
             details: 'Máximo: 5 MB'
+    PayloadTooLarge:
+      description: El body JSON pesa más de 100 KB (`PAYLOAD_TOO_LARGE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 413
+            error: PAYLOAD_TOO_LARGE
+            message: El body supera el tamaño máximo permitido
+            details: 'Máximo: 100 KB'
+    DatabaseUnavailable:
+      description: La API está levantada pero no tiene conexión con MongoDB (`DATABASE_UNAVAILABLE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            status: error
+            statusCode: 503
+            error: DATABASE_UNAVAILABLE
+            message: La API no tiene conexión con la base de datos
     InvalidFileType:
       description: |
         El archivo no es PDF, JPEG, PNG ni WEBP, o su contenido no coincide con el tipo declarado (`INVALID_FILE_TYPE`).

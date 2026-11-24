@@ -77,6 +77,18 @@ describe('Swagger', () => {
       }
     });
 
+    it('debería documentar el 413 PAYLOAD_TOO_LARGE en todos los endpoints que reciben JSON', () => {
+      const withJsonBody = documentedOperations.filter(({ operation }) => operation.requestBody?.content?.['application/json']);
+      expect(withJsonBody).to.not.be.empty;
+      withJsonBody.forEach(({ method, path, operation }) => {
+        expect(operation.responses['413']?.$ref, `${method} ${path}`).to.equal('#/components/responses/PayloadTooLarge');
+      });
+    });
+
+    it('debería documentar el 503 del health check', () => {
+      expect(swaggerSpecs.paths['/api/health'].get.responses['503'].$ref).to.equal('#/components/responses/DatabaseUnavailable');
+    });
+
     it('no debería tener referencias ($ref) rotas', () => {
       const refs = JSON.stringify(swaggerSpecs).match(/"\$ref":"[^"]+"/g) ?? [];
       const broken = refs

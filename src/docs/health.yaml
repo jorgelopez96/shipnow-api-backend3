@@ -6,10 +6,11 @@ paths:
         Health check para monitoreo (por ejemplo, el `HEALTHCHECK` del contenedor de Docker).
         Devuelve si la API está viva, el entorno, cuántos segundos lleva levantada, la hora del servidor
         y si hay conexión con MongoDB. No expone versiones, URIs, rutas ni variables de entorno.
+        Si se cae la conexión con MongoDB responde `503`, así el `HEALTHCHECK` marca el contenedor como unhealthy.
       tags: [Health]
       responses:
         "200":
-          description: La API está levantada
+          description: La API está levantada y conectada a MongoDB
           content:
             application/json:
               schema:
@@ -35,5 +36,7 @@ paths:
                             format: date-time
                           database:
                             type: string
-                            enum: [connected, disconnected]
+                            enum: [connected]
                             example: connected
+        "503":
+          $ref: '#/components/responses/DatabaseUnavailable'
