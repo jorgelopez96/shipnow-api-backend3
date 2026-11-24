@@ -43,6 +43,14 @@ export const ORDER_TO_DELIVERY_STATUS = {
   [ORDER_STATUS.CANCELLED]: DELIVERY_STATUS.CANCELLED,
 };
 
+// El tracking de una entrega actualiza también su pedido (pending → created, el resto con el mismo nombre).
+export const DELIVERY_TO_ORDER_STATUS = Object.fromEntries(
+  Object.entries(ORDER_TO_DELIVERY_STATUS).map(([orderStatus, deliveryStatus]) => [deliveryStatus, orderStatus])
+);
+
+export const CLOSED_ORDER_STATUSES = [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED];
+export const CLOSED_DELIVERY_STATUSES = [DELIVERY_STATUS.DELIVERED, DELIVERY_STATUS.CANCELLED];
+
 export const DELIVERY_STATUS_WITHOUT_DRIVER = [DELIVERY_STATUS.PENDING, DELIVERY_STATUS.CANCELLED];
 
 export const DOCUMENT_TYPES = {

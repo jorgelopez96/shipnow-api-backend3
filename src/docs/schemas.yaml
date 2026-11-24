@@ -310,6 +310,7 @@ components:
 
     Delivery:
       type: object
+      description: Entrega (envío) de un pedido. Junto con el pedido forma el envío de ShipNow.
       properties:
         _id:
           type: string
@@ -335,6 +336,19 @@ components:
           enum: [low, normal, high]
           description: Se copia de la prioridad del pedido
           example: normal
+        history:
+          type: array
+          description: Tracking del envío. Un registro por cada estado por el que pasó, del más viejo al más nuevo.
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pending, assigned, picked_up, in_transit, delivered, cancelled]
+                example: assigned
+              changedAt:
+                type: string
+                format: date-time
         createdAt:
           type: string
           format: date-time

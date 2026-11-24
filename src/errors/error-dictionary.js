@@ -24,6 +24,9 @@ export const ERRORS = Object.freeze({
   DELIVERY_NOT_FOUND: defineError(404, 'No se encontró la entrega solicitada'),
   DRIVER_NOT_FOUND: defineError(404, 'El repartidor no existe o no tiene rol de repartidor'),
   DRIVER_NOT_AVAILABLE: defineError(409, 'El repartidor no está disponible para tomar una nueva entrega'),
+  INVALID_DELIVERY_STATUS: defineError(400, 'El estado indicado no es válido para una entrega'),
+  DRIVER_REQUIRED: defineError(400, 'La entrega necesita un repartidor para pasar a ese estado'),
+  DELIVERY_ALREADY_CLOSED: defineError(409, 'La entrega ya fue completada o cancelada y no puede cambiar de estado'),
 
   FILE_REQUIRED: defineError(400, 'Falta el archivo a subir'),
   UNEXPECTED_FILE_FIELD: defineError(400, 'El archivo se envió en un campo distinto al esperado'),

@@ -9,6 +9,7 @@ export const generateDelivery = (order = generateOrder(), driverId = faker.datab
     order: order._id,
     status,
     priority: order.priority,
+    history: [{ status, changedAt: faker.date.recent({ days: 7 }) }],
   };
   if (!DELIVERY_STATUS_WITHOUT_DRIVER.includes(status)) delivery.driver = driverId;
   return delivery;

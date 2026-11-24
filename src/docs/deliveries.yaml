@@ -92,6 +92,52 @@ paths:
         "500":
           $ref: '#/components/responses/InternalError'
 
+  /api/deliveries/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    patch:
+      summary: "Tracking: cambiar el estado de una entrega"
+      description: |
+        Avanza el envío: `pending`, `assigned`, `picked_up`, `in_transit`, `delivered` o `cancelled`.
+        Cada cambio se suma a `history` con su fecha, y el pedido de la entrega pasa al estado equivalente
+        (`pending` → `created`, el resto con el mismo nombre). Para pasar a un estado que no sea `pending` o `cancelled`
+        la entrega necesita repartidor: si todavía no tiene, se manda `driver` (con rol `driver` y disponible).
+        Una entrega `delivered` o `cancelled` queda cerrada, y tampoco se puede mover si su pedido ya está cerrado.
+      tags: [Deliveries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [pending, assigned, picked_up, in_transit, delivered, cancelled]
+                  example: in_transit
+                driver:
+                  type: string
+                  description: ID de un repartidor disponible (opcional; reemplaza al actual)
+                  example: 665f4d0a8f9a1b001234abd0
+      responses:
+        "200":
+          description: Estado actualizado. Devuelve la entrega con el pedido y el repartidor populados y el historial completo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryResponse'
+        "400":
+          $ref: '#/components/responses/InvalidDeliveryStatus'
+        "404":
+          $ref: '#/components/responses/DeliveryOrDriverNotFound'
+        "409":
+          $ref: '#/components/responses/DeliveryStatusConflict'
+        "413":
+          $ref: '#/components/responses/PayloadTooLarge'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
 components:
   responses:
     DeliveryNotFound:
@@ -159,3 +205,74 @@ components:
             statusCode: 409
             error: DRIVER_NOT_AVAILABLE
             message: El repartidor no está disponible para tomar una nueva entrega
+    InvalidDeliveryStatus:
+      description: |
+        Estado inexistente o faltante (`INVALID_DELIVERY_STATUS`), falta el repartidor para ese estado (`DRIVER_REQUIRED`),
+        ID con formato inválido (`INVALID_ID`) o body que no es JSON (`INVALID_JSON`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            estadoInvalido:
+              summary: El estado no existe
+              value:
+                status: error
+                statusCode: 400
+                error: INVALID_DELIVERY_STATUS
+                message: El estado indicado no es válido para una entrega
+                details: 'Estados válidos: pending, assigned, picked_up, in_transit, delivered, cancelled'
+            sinRepartidor:
+              summary: Falta el repartidor
+              value:
+                status: error
+                statusCode: 400
+                error: DRIVER_REQUIRED
+                message: La entrega necesita un repartidor para pasar a ese estado
+                details: 'Para pasar a "in_transit" mandá "driver" en el body'
+    DeliveryOrDriverNotFound:
+      description: La entrega no existe (`DELIVERY_NOT_FOUND`) o el repartidor no existe o no tiene rol `driver` (`DRIVER_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            entregaInexistente:
+              summary: La entrega no existe
+              value:
+                status: error
+                statusCode: 404
+                error: DELIVERY_NOT_FOUND
+                message: No se encontró la entrega solicitada
+            repartidorInexistente:
+              summary: El repartidor no existe
+              value:
+                status: error
+                statusCode: 404
+                error: DRIVER_NOT_FOUND
+                message: El repartidor no existe o no tiene rol de repartidor
+    DeliveryStatusConflict:
+      description: |
+        La entrega ya está cerrada (`DELIVERY_ALREADY_CLOSED`), su pedido ya está cerrado (`ORDER_ALREADY_CLOSED`)
+        o el repartidor no está disponible (`DRIVER_NOT_AVAILABLE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            entregaCerrada:
+              summary: La entrega ya está cerrada
+              value:
+                status: error
+                statusCode: 409
+                error: DELIVERY_ALREADY_CLOSED
+                message: La entrega ya fue completada o cancelada y no puede cambiar de estado
+                details: 'Estado actual: delivered'
+            pedidoCerrado:
+              summary: El pedido ya está cerrado
+              value:
+                status: error
+                statusCode: 409
+                error: ORDER_ALREADY_CLOSED
+                message: El pedido ya fue entregado o cancelado y no puede cambiar de estado
+                details: 'Estado actual del pedido: cancelled'

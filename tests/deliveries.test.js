@@ -106,4 +106,91 @@ describe('Deliveries API', () => {
       expectError(await request(app).get(`/api/deliveries/${INVALID_ID}`), 400, 'INVALID_ID');
     });
   });
+
+  describe('PATCH /api/deliveries/:id/status (tracking)', () => {
+    const track = (id, body) => request(app).patch(`/api/deliveries/${id}/status`).send(body);
+    const orderStatus = async (id) => expectSuccess(await request(app).get(`/api/orders/${id}`)).status;
+
+    it('debería seguir el envío completo: crear pedido y entrega, avanzarla hasta delivered y dejar el historial', async () => {
+      const customer = await createUser();
+      const newOrder = expectSuccess(
+        await request(app)
+          .post('/api/orders')
+          .send({ customer: customer._id, deliveryAddress: 'Calle Falsa 123', items: [{ name: 'Caja', quantity: 1, price: 900 }] }),
+        201
+      );
+      const delivery = expectSuccess(await request(app).post('/api/deliveries').send({ order: newOrder._id }), 201);
+      expect(delivery.history.map((change) => change.status)).to.deep.equal(['pending']);
+
+      expectSuccess(await track(delivery._id, { status: 'assigned', driver: driver._id }));
+      expect(await orderStatus(newOrder._id)).to.equal('assigned');
+      expectSuccess(await track(delivery._id, { status: 'picked_up' }));
+      expectSuccess(await track(delivery._id, { status: 'in_transit' }));
+      expect(await orderStatus(newOrder._id)).to.equal('in_transit');
+
+      const delivered = expectSuccess(await track(delivery._id, { status: 'delivered' }));
+      expect(delivered).to.include({ status: 'delivered' });
+      expect(delivered.driver).to.include({ _id: String(driver._id), role: 'driver' });
+      expect(delivered.order).to.include({ _id: newOrder._id, status: 'delivered' });
+      expect(delivered.history.map((change) => change.status)).to.deep.equal(['pending', 'assigned', 'picked_up', 'in_transit', 'delivered']);
+      for (const change of delivered.history) expect(new Date(change.changedAt).toISOString()).to.equal(change.changedAt);
+    });
+
+    it('debería pasar el pedido a created si la entrega vuelve a pending', async () => {
+      const created = await DeliveryModel.create({ order: order._id, driver: driver._id, status: 'assigned' });
+      expectSuccess(await track(created._id, { status: 'pending' }));
+      expect(await orderStatus(order._id)).to.equal('created');
+    });
+
+    it('debería cancelar una entrega sin repartidor y cancelar su pedido', async () => {
+      const created = await DeliveryModel.create({ order: order._id });
+      expect(expectSuccess(await track(created._id, { status: 'cancelled' }))).to.include({ status: 'cancelled' });
+      expect(await orderStatus(order._id)).to.equal('cancelled');
+    });
+
+    for (const body of [{}, { status: 'perdida' }]) {
+      it(`debería responder 400 INVALID_DELIVERY_STATUS con ${JSON.stringify(body)}`, async () => {
+        const created = await DeliveryModel.create({ order: order._id });
+        const res = await track(created._id, body);
+        expectError(res, 400, 'INVALID_DELIVERY_STATUS');
+        expect(res.body.details).to.include('pending, assigned');
+      });
+    }
+
+    it('debería responder 400 DRIVER_REQUIRED si la entrega no tiene repartidor y no se manda uno', async () => {
+      const created = await DeliveryModel.create({ order: order._id });
+      expectError(await track(created._id, { status: 'in_transit' }), 400, 'DRIVER_REQUIRED');
+      expect(await orderStatus(order._id)).to.equal('created');
+    });
+
+    it('debería responder 404 DELIVERY_NOT_FOUND si la entrega no existe', async () => {
+      expectError(await track(newId(), { status: 'assigned' }), 404, 'DELIVERY_NOT_FOUND');
+    });
+
+    it('debería responder 404 DRIVER_NOT_FOUND si el repartidor no existe', async () => {
+      const created = await DeliveryModel.create({ order: order._id });
+      expectError(await track(created._id, { status: 'assigned', driver: newId() }), 404, 'DRIVER_NOT_FOUND');
+    });
+
+    it('debería responder 409 DRIVER_NOT_AVAILABLE si el repartidor no está disponible', async () => {
+      const created = await DeliveryModel.create({ order: order._id });
+      const busyDriver = await createDriver({ isAvailable: false });
+      expectError(await track(created._id, { status: 'assigned', driver: busyDriver._id }), 409, 'DRIVER_NOT_AVAILABLE');
+    });
+
+    it('debería responder 409 DELIVERY_ALREADY_CLOSED si la entrega ya fue entregada', async () => {
+      const created = await DeliveryModel.create({ order: order._id, driver: driver._id, status: 'delivered' });
+      expectError(await track(created._id, { status: 'in_transit' }), 409, 'DELIVERY_ALREADY_CLOSED');
+    });
+
+    it('debería responder 409 ORDER_ALREADY_CLOSED si el pedido ya fue cancelado', async () => {
+      const cancelledOrder = await createOrder((await createUser())._id, { status: 'cancelled' });
+      const created = await DeliveryModel.create({ order: cancelledOrder._id, driver: driver._id, status: 'assigned' });
+      expectError(await track(created._id, { status: 'in_transit' }), 409, 'ORDER_ALREADY_CLOSED');
+    });
+
+    it('debería responder 400 INVALID_ID si el ID no tiene formato válido', async () => {
+      expectError(await track(INVALID_ID, { status: 'assigned' }), 400, 'INVALID_ID');
+    });
+  });
 });

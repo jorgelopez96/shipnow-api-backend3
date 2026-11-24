@@ -5,7 +5,7 @@ paths:
       description: |
         **Herramienta de validación, no es una funcionalidad de negocio.**
         Escribe un mensaje de cada nivel (debug, http, info, warning, error y fatal) para revisar
-        qué niveles se muestran en consola y cuáles llegan al archivo `logs/error-<fecha>.log` (solo error y fatal).
+        qué niveles llegan a la consola y a `logs/combined.log` y cuáles a `logs/error.log` (solo error y fatal).
         Solo existe fuera de producción.
       tags: [Logger]
       responses:

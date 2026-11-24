@@ -25,4 +25,12 @@ export const deliveriesController = {
       next(error);
     }
   },
+
+  async updateStatus(req, res, next) {
+    try {
+      sendSuccess(res, await deliveriesService.updateStatus(req.params.id, req.body ?? {}));
+    } catch (error) {
+      next(error);
+    }
+  },
 };

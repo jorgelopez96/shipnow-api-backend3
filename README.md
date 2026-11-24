@@ -13,6 +13,22 @@ Incluye:
 - **Carga de archivos** con Multer: documentos de usuario y comprobantes de entrega (ver [Carga de archivos](#carga-de-archivos)).
 - **Preparada para producción:** listados paginados, health check y contenedor de Docker (ver [Producción y Docker](#producción-y-docker)).
 
+**Envíos en ShipNow:** un envío es un **pedido** (`/api/orders`: qué se manda, a quién y a dónde) más su **entrega** (`/api/deliveries`: quién lo lleva y en qué etapa está). El tracking se hace sobre la entrega con `PATCH /api/deliveries/:id/status`, que guarda cada cambio en un historial y deja el pedido en el mismo estado (ver [Pedidos y entregas](#pedidos-y-entregas)).
+
+## Tecnologías
+
+| Para qué            | Qué se usa                                              |
+| ------------------- | ------------------------------------------------------- |
+| Servidor            | Node.js 22, Express 5 (ES Modules)                      |
+| Base de datos       | MongoDB 8 con Mongoose 9                                |
+| Contraseñas         | bcrypt                                                  |
+| Datos simulados     | @faker-js/faker                                         |
+| Logs                | Winston (consola en desarrollo, `error.log` y `combined.log`) |
+| Documentación       | swagger-jsdoc + swagger-ui-express (OpenAPI 3.0)        |
+| Carga de archivos   | Multer                                                  |
+| Tests               | Mocha, Chai y Supertest                                 |
+| Contenedores        | Docker (imagen multi-stage) y Docker Compose            |
+
 ## Instalación
 
 Requisitos: Node.js 20.19 o superior (o 22.12+) y una base MongoDB (local o en Atlas). Para correrla en un contenedor, ver [Producción y Docker](#producción-y-docker).
@@ -32,7 +48,7 @@ cp .env.test.example .env.test   # solo para correr los tests
 | `MONGODB_URI` | Sí          | -       | Cadena de conexión a MongoDB                                   |
 | `NODE_ENV`    | Sí          | -       | `development`, `production` o `test`. En `production` no hay mocks |
 | `PORT`        | No          | `8080`  | Puerto del servidor (entero entre 1 y 65535)                   |
-| `LOG_LEVEL`   | No          | Según `NODE_ENV` | Nivel mínimo de los logs de consola (ver [Logging](#logging)) |
+| `LOG_LEVEL`   | No          | Según `NODE_ENV` | Nivel mínimo de la consola y de `combined.log` (ver [Logging](#logging)) |
 
 Solo la carpeta `src/config/` lee `process.env`. `env.loader.js` lee y valida las variables sin tirar errores, y `index.js` exporta el objeto `config` congelado, o tira un error si algo está mal. Si falta una obligatoria o tiene un valor inválido, la app no arranca y el motivo queda registrado como `fatal`:
 
@@ -80,7 +96,7 @@ src/docs/
 | **Users**      | `GET`/`POST /api/users`, `GET`/`PUT`/`DELETE /api/users/{id}`, `POST /api/users/{id}/documents` |
 | **Products**   | `GET`/`POST /api/products`, `GET`/`PUT`/`DELETE /api/products/{id}`                             |
 | **Orders**     | `GET`/`POST /api/orders`, `GET /api/orders/{id}`, `PATCH /api/orders/{id}/status`, `POST /api/orders/{id}/proof` |
-| **Deliveries** | `GET`/`POST /api/deliveries`, `GET /api/deliveries/{id}`                                        |
+| **Deliveries** | `GET`/`POST /api/deliveries`, `GET /api/deliveries/{id}`, `PATCH /api/deliveries/{id}/status` (tracking) |
 | **Health**     | `GET /api/health`                                                                               |
 | **Mocks**      | `GET /api/mocks/mockingusers`, `/mockingorders`, `/drivers`, `/deliveries` (y sus alias), `POST /api/mocks/generateData` (y `/seed`) |
 | **Logger**     | `GET /api/loggerTest`, aclarado como herramienta de validación y no de negocio                  |
@@ -91,9 +107,9 @@ Cada endpoint tiene método, ruta, un `summary` corto y una `description` que ex
 
 **Respuestas exitosas reutilizables:** `UserResponse`, `UserListResponse`, `ProductResponse`, `ProductListResponse`, `OrderResponse`, `OrderListResponse`, `DeliveryResponse` y `DeliveryListResponse` combinan `SuccessResponse` con el recurso. Cada endpoint las referencia con `$ref` en lugar de repetir la estructura.
 
-**Respuestas de error reutilizables:** todos los errores se definen una sola vez en `components/responses` y los endpoints los referencian con `$ref`, sin ejemplos inline. Las comunes están en `schemas.yaml` (`InvalidQueryParam`, `InvalidId`, `InvalidData`, `InvalidIdOrData`, `InternalError`, `FileTooLarge`, `InvalidFileType`, `UploadError`) y las de cada módulo en su YAML (`UserNotFound`, `UserAlreadyExists`, `InvalidUserData`, `ProductUnavailable`, `OrderAlreadyClosed`, `DriverNotAvailable`, etc.). Cuando un status puede tener varias causas, la respuesta trae un ejemplo por cada una para elegirlo en Swagger UI. Por ejemplo, `InvalidUserData` se usa en `POST` y `PUT /api/users` y muestra contraseña faltante, campo obligatorio, rol inexistente, ID inválido y JSON roto.
+**Respuestas de error reutilizables:** todos los errores se definen una sola vez en `components/responses` y los endpoints los referencian con `$ref`, sin ejemplos inline. Las comunes están en `schemas.yaml` (`InvalidQueryParam`, `InvalidId`, `InvalidData`, `InvalidIdOrData`, `InternalError`, `FileTooLarge`, `InvalidFileType`, `UploadError`) y las de cada módulo en su YAML (`UserNotFound`, `UserAlreadyExists`, `InvalidUserData`, `ProductUnavailable`, `OrderAlreadyClosed`, `DriverNotAvailable`, `DeliveryStatusConflict`, etc.). Cuando un status puede tener varias causas, la respuesta trae un ejemplo por cada una para elegirlo en Swagger UI. Por ejemplo, `InvalidUserData` se usa en `POST` y `PUT /api/users` y muestra contraseña faltante, campo obligatorio, rol inexistente, ID inválido y JSON roto.
 
-Los tests (`tests/docs.test.js`) verifican que no haya `$ref` rotos, que cada endpoint tenga `summary` y `description`, que todos los errores usen `$ref`, que `GET /api/docs/` responda 200, que el server sea relativo y que todos los listados documenten `page` y `limit`.
+Los tests (`tests/docs.test.js`) verifican que no haya `$ref` rotos, que cada endpoint tenga `summary` y `description`, que todos los errores usen `$ref`, que `GET /api/docs/` responda 200, que el server sea relativo, que todos los listados documenten `page` y `limit`, que todos los endpoints con body JSON documenten el `413` y que el health documente el `503`.
 
 Los dos endpoints de carga están documentados como `multipart/form-data`: nombre del campo del archivo (`document` o `proof`), campo `type` con los tipos de documento permitidos, tipos de archivo y tamaño máximo, respuesta exitosa y cada error posible. Desde **Try it out** se puede elegir el archivo y subirlo.
 
@@ -160,7 +176,8 @@ La suite se puede correr las veces que haga falta, sin borrar nada a mano.
 | `tests/users.test.js`       | Listar, crear, consultar, actualizar y borrar usuarios. Contraseña hasheada y nunca devuelta, email duplicado, rol inválido. **Carga de documentos:** carga correcta y metadatos, licencia de repartidor, falta el archivo, campo equivocado, tipo de documento inválido, tipo de archivo no permitido o disfrazado, más de 5 MB, usuario inexistente, y que no queden archivos sueltos cuando falla |
 | `tests/products.test.js`    | CRUD de productos, estado según el stock, `code` duplicado, producto sin stock                                     |
 | `tests/orders.test.js`      | Listar, crear y consultar pedidos por ID, total calculado, cliente populado, **cambio de estado**, estado inválido y pedido cerrado. **Comprobantes:** carga correcta, reemplazo del anterior, falta el archivo, campo equivocado, tipo no permitido, pedido inexistente |
-| `tests/deliveries.test.js`  | Listar, crear y consultar entregas, repartidor inexistente, sin rol `driver` o no disponible                       |
+| `tests/deliveries.test.js`  | Listar, crear y consultar entregas, repartidor inexistente, sin rol `driver` o no disponible. **Flujo completo de un envío:** crear el pedido y la entrega, avanzarla con el tracking hasta `delivered`, el pedido sincronizado y el historial. Estado inválido, falta el repartidor, entrega o pedido ya cerrados |
+| `tests/health.test.js`      | Estado, entorno, uptime y conexión a la base, que no exponga datos sensibles, y `503` si se cae MongoDB             |
 | `tests/mocks.test.js`       | Los 6 `GET` de mocks y los 2 `POST` de carga: cantidades por defecto y por `qty`, datos guardados y relacionados, cantidades inválidas, límite y dependencias faltantes |
 | `tests/logger.test.js`      | `/api/loggerTest` responde bien y escribe un mensaje de cada nivel                                                 |
 | `tests/docs.test.js`        | `/api/docs` sirve Swagger UI, la especificación tiene info, tags y schemas, y no hay `$ref` rotas                  |
@@ -267,6 +284,18 @@ Campos: `firstName`, `lastName`, `email` (único), `password`, `role` (`customer
 | GET    | `/api/deliveries`          | Lista las entregas con su pedido y repartidor (paginado, filtro `?status=`)                   |
 | GET    | `/api/deliveries/:id`      | Obtiene una entrega                                                                           |
 | POST   | `/api/deliveries`          | Crea una entrega. El pedido tiene que existir y el repartidor tener rol `driver` y estar disponible |
+| PATCH  | `/api/deliveries/:id/status` | **Tracking.** Avanza la entrega (`{ "status": "in_transit" }`), la suma al historial y actualiza el pedido |
+
+**Tracking de un envío:** cada entrega guarda en `history` los estados por los que pasó, con fecha (`pending` → `assigned` → `picked_up` → `in_transit` → `delivered`, o `cancelled`). Al cambiar el estado de la entrega, el pedido pasa al estado equivalente (`pending` → `created`, el resto con el mismo nombre). Reglas:
+
+- Fuera de `pending` y `cancelled` la entrega necesita repartidor. Si no tiene, se manda en el mismo body: `{ "status": "assigned", "driver": "<id>" }` (si no, `400 DRIVER_REQUIRED`).
+- Una entrega `delivered` o `cancelled` queda cerrada (`409 DELIVERY_ALREADY_CLOSED`), y tampoco se mueve si su pedido ya está cerrado (`409 ORDER_ALREADY_CLOSED`).
+
+```bash
+curl -X PATCH http://localhost:8080/api/deliveries/<id>/status -H "Content-Type: application/json" -d '{"status":"assigned","driver":"<id-repartidor>"}'
+curl -X PATCH http://localhost:8080/api/deliveries/<id>/status -H "Content-Type: application/json" -d '{"status":"in_transit"}'
+curl -X PATCH http://localhost:8080/api/deliveries/<id>/status -H "Content-Type: application/json" -d '{"status":"delivered"}'
+```
 
 ## Mocking
 
@@ -435,6 +464,9 @@ Está en `src/errors/error-dictionary.js`.
 | `DELIVERY_NOT_FOUND`        | 404  | La entrega no existe                                                 |
 | `DRIVER_NOT_FOUND`          | 404  | El repartidor no existe o no tiene rol `driver`                      |
 | `DRIVER_NOT_AVAILABLE`      | 409  | El repartidor tiene `isAvailable: false`                             |
+| `INVALID_DELIVERY_STATUS`   | 400  | El estado no es uno de `DELIVERY_STATUS`                             |
+| `DRIVER_REQUIRED`           | 400  | La entrega pasa a un estado que necesita repartidor y no tiene       |
+| `DELIVERY_ALREADY_CLOSED`   | 409  | Se intenta cambiar el estado de una entrega entregada o cancelada    |
 | `FILE_REQUIRED`             | 400  | No llegó el archivo (o el body no es `multipart/form-data`)          |
 | `UNEXPECTED_FILE_FIELD`     | 400  | El archivo llegó en otro campo o se mandó más de uno                 |
 | `INVALID_DOCUMENT_TYPE`     | 400  | El tipo de documento no existe o no corresponde (licencia de alguien que no es repartidor) |
@@ -474,6 +506,8 @@ curl -X POST http://localhost:8080/api/orders -H "Content-Type: application/json
   -d '{"customer":"507f1f77bcf86cd799439011","items":[{"name":"Caja","quantity":1,"price":10}],"deliveryAddress":"Calle 1"}'  # 404 USER_NOT_FOUND
 curl -X PATCH http://localhost:8080/api/orders/<id>/status -H "Content-Type: application/json" -d '{"status":"on_the_way"}'  # 400 INVALID_ORDER_STATUS
 curl -X POST http://localhost:8080/api/deliveries -H "Content-Type: application/json" -d '{"order":"<id>","driver":"<id-de-un-customer>"}'  # 404 DRIVER_NOT_FOUND
+curl -X PATCH http://localhost:8080/api/deliveries/<id-pendiente>/status -H "Content-Type: application/json" -d '{"status":"in_transit"}'  # 400 DRIVER_REQUIRED
+curl -X PATCH http://localhost:8080/api/deliveries/<id-entregada>/status -H "Content-Type: application/json" -d '{"status":"in_transit"}' # 409 DELIVERY_ALREADY_CLOSED
 
 # Mocks
 curl "http://localhost:8080/api/mocks/users?qty=abc"        # 400 INVALID_MOCK_AMOUNT (no es un número)
@@ -572,7 +606,7 @@ curl -X POST http://localhost:8080/api/orders/507f1f77bcf86cd799439011/proof -F 
 
 ## Logging
 
-Los logs se manejan con **[Winston](https://github.com/winstonjs/winston)** y rotan por día con **winston-daily-rotate-file**. Todo el proyecto importa el logger desde `src/logger/index.js`, y en `src/` no queda ningún `console.*`.
+Los logs se manejan con **[Winston](https://github.com/winstonjs/winston)**: los errores van a `logs/error.log`, toda la actividad a `logs/combined.log` y la consola se usa solo en desarrollo. Todo el proyecto importa el logger desde `src/logger/index.js`, y en `src/` no queda ningún `console.*`.
 
 ```
 src/logger/
@@ -580,7 +614,7 @@ src/logger/
 ├── levels.js                    Niveles y colores
 ├── formats.js                   Formato de línea, con colores (consola) o sin colores (archivo)
 ├── redact-sensitive.format.js   Oculta datos sensibles antes de escribir
-├── transports.js                Consola y archivo de errores con rotación
+├── transports.js                Consola, error.log y combined.log con rotación por tamaño
 └── error-entry.js               Arma el mensaje y el stack de un error
 ```
 
@@ -599,15 +633,15 @@ En Winston, **un número más bajo es más grave**, y un nivel registra ese nive
 
 ### Comportamiento por entorno
 
-| `NODE_ENV`    | Consola desde | Colores |
-| ------------- | ------------- | ------- |
-| `development` | `debug`       | Sí      |
-| `production`  | `info`        | No      |
-| `test`        | Nada (silencio) | -     |
+| `NODE_ENV`    | Consola                  | `combined.log` | `error.log`         |
+| ------------- | ------------------------ | -------------- | ------------------- |
+| `development` | Sí, desde `debug`, con colores | Desde `debug` | `error` y `fatal` |
+| `production`  | No                       | Desde `info`   | `error` y `fatal`   |
+| `test`        | No (silencio)            | No se crea     | No se crea          |
 
-En `test` el logger no escribe en la consola ni crea el archivo de errores, para que la salida de Mocha quede limpia (ver [Testing](#testing)).
+En `test` el logger no escribe en la consola ni crea archivos, para que la salida de Mocha quede limpia (ver [Testing](#testing)).
 
-Con `LOG_LEVEL` se puede cambiar el nivel de la consola (por ejemplo, `LOG_LEVEL=warning`). Si tiene un valor que no es un nivel, la app no arranca.
+Con `LOG_LEVEL` se puede cambiar el nivel de la consola y de `combined.log` (por ejemplo, `LOG_LEVEL=warning`). `error.log` siempre guarda `error` y `fatal`. Si `LOG_LEVEL` tiene un valor que no es un nivel, la app no arranca.
 
 Cada línea tiene el formato `YYYY-MM-DD HH:mm:ss [nivel] [request-id] mensaje`. El request-id solo aparece en los logs que se escriben durante un request. Si hay metadata va después, en JSON, y si es un error el stack trace va en las líneas siguientes.
 
@@ -631,11 +665,11 @@ curl -i http://localhost:8080/api/orders/507f1f77bcf86cd799439011   # el header 
 
 ### Qué se registra
 
-- **Arranque:** el servidor escuchando y la conexión a MongoDB, con la URI enmascarada, van como `info`. Si la configuración es inválida o MongoDB no responde al arrancar, se registra un `fatal` y se hace `process.exit(1)`, esperando antes a que la línea quede escrita en el archivo. Las excepciones no controladas y las promesas rechazadas sin manejar también son `fatal`.
+- **Arranque:** el servidor escuchando y la conexión a MongoDB, con la URI enmascarada, van como `info`. Si la configuración es inválida o MongoDB no responde al arrancar, se registra un `fatal` y la app sale con código `1`, esperando antes a que la línea quede escrita en los dos archivos. Las excepciones no controladas y las promesas rechazadas sin manejar también son `fatal`.
 - **Conexión a MongoDB ya en marcha:** desconexión (`warning`), reconexión (`info`) y errores (`error`).
 - **Requests:** el middleware `http-logger` registra cada request cuando termina (evento `finish`). Nunca loguea el body.
 - **Errores de requests:** solo los registra el middleware de errores, así no se duplican. Si el status es menor a 500 van como `warning`, con el código, el método y la ruta. Eso incluye las rutas inexistentes. Si es 500 o más van como `error`, con el stack del error original. La respuesta al cliente no cambia.
-- **Negocio:** se registra en los services, que no dependen de Express. Son el seed generado con las cantidades por colección (`info`), el rollback del seed (`error`), el pedido creado con su id (`info`), el cambio de estado de un pedido (`info`), el documento cargado a un usuario y el comprobante asociado a un pedido (`info`, con tipo, MIME type y tamaño).
+- **Negocio:** se registra en los services, que no dependen de Express. Son el seed generado con las cantidades por colección (`info`), el rollback del seed (`error`), el pedido creado con su id (`info`), el cambio de estado de un pedido y el de una entrega con su pedido (`info`), el documento cargado a un usuario y el comprobante asociado a un pedido (`info`, con tipo, MIME type y tamaño).
 - **Archivos rechazados:** el intento de subir un tipo no permitido se registra como `warning` con el MIME type recibido, además de la línea del error. Si falla el guardado (`UPLOAD_ERROR`), va como `error` con el stack.
 
 ### Datos sensibles
@@ -645,8 +679,9 @@ Antes de escribir, el formato `redact-sensitive` reemplaza por `[REDACTED]` cual
 ### Archivos y rotación
 
 - **Carpeta:** `logs/`, en la raíz del proyecto.
-- **Archivo:** `logs/error-YYYY-MM-DD.log`, uno por día. Guarda **solo `error` y `fatal`**, nunca `info` ni `debug`.
-- **Rotación:** se crea un archivo nuevo cada día o al llegar a 20 MB. Se conservan los últimos **14 días** y los más viejos se borran solos.
+- **`logs/error.log`:** guarda **solo `error` y `fatal`**, nunca `info` ni `debug`.
+- **`logs/combined.log`:** toda la actividad desde `LOG_LEVEL` (`info` en producción): arranque, requests con error, eventos de negocio, errores.
+- **Rotación:** al llegar a 20 MB el archivo pasa a `error1.log` / `combined1.log` y se empieza uno nuevo. Se conservan **5 archivos** de cada uno y los más viejos se borran solos. El archivo actual siempre se llama igual.
 - **Git:** `.gitignore` ignora `logs/*` y `*.log`, y conserva la carpeta con `logs/.gitkeep`.
 
 ### Endpoint de prueba
@@ -666,7 +701,7 @@ npm run dev
 curl http://localhost:8080/api/loggerTest
 ```
 
-En la consola aparecen los 6 niveles, y en `logs/error-<fecha>.log` solo las líneas de `error` y `fatal`. Los errores 4xx quedan como `warning` en la consola y no llegan al archivo:
+En la consola y en `logs/combined.log` aparecen los 6 niveles, y en `logs/error.log` solo las líneas de `error` y `fatal`. Los errores 4xx quedan como `warning` y no llegan a `error.log`:
 
 ```bash
 curl http://localhost:8080/api/orders/507f1f77bcf86cd799439011   # warning ORDER_NOT_FOUND
@@ -674,7 +709,7 @@ curl "http://localhost:8080/api/mocks/users?qty=abc"            # warning INVALI
 curl http://localhost:8080/api/ruta-que-no-existe               # warning ROUTE_NOT_FOUND
 ```
 
-Con `NODE_ENV=production` dejan de aparecer `debug` y `http`, los logs van sin colores, los errores no traen `details` y `/api/mocks` y `/api/loggerTest` responden `404 ROUTE_NOT_FOUND`. Probado levantando el servidor con `NODE_ENV=production`:
+Con `NODE_ENV=production` la consola queda vacía y todo va a los archivos, dejan de aparecer `debug` y `http`, los errores no traen `details` y `/api/mocks` y `/api/loggerTest` responden `404 ROUTE_NOT_FOUND`. Así queda `logs/combined.log` levantando el servidor con `NODE_ENV=production`:
 
 ```
 2026-11-16 00:17:41 [info] Conectado a MongoDB en mongodb://127.0.0.1:27017/shipnow_pruebas
@@ -716,7 +751,7 @@ Hay una plantilla por entorno. Las copias con los valores reales están en `.git
 npm install
 cp .env.example .env    # completá MONGODB_URI
 npm run dev             # con nodemon
-npm start               # node server.js (el mismo comando que usa la imagen de Docker)
+npm start               # node server.js (el mismo comando que corre la imagen de Docker)
 ```
 
 ### Cómo correr los tests
@@ -766,13 +801,18 @@ La lógica está en dos lugares: `src/utils/list-query.js` lee y valida `page`, 
 
 - **Payloads chicos:** los `populate` traen solo los campos que hacen falta (nombre y email del cliente, estado y total del pedido, nombre y rol del repartidor), la contraseña nunca sale y los productos se leen con `.lean()`.
 - **Event Loop:** no hay operaciones sincrónicas en `src/`. El manejo de archivos usa `fs/promises`, bcrypt se usa en su versión async y el contenido de los uploads se valida leyendo solo los primeros 12 bytes.
-- **Logs:** en producción el nivel por defecto es `info`, así que no se escribe una línea por cada request (`http`) ni el detalle de `debug`. El archivo guarda solo `error` y `fatal`, rota cada día o a los 20 MB y conserva 14 días.
+- **Logs:** en producción el nivel por defecto es `info`, así que no se escribe una línea por cada request (`http`) ni el detalle de `debug`. `error.log` guarda solo `error` y `fatal` y `combined.log` la actividad desde `info`; los dos rotan a los 20 MB y conservan 5 archivos.
 - **Body JSON:** máximo 100 KB (`express.json({ limit: '100kb' })`). Uno más grande responde `413 PAYLOAD_TOO_LARGE` sin llegar a los controllers.
 - **Uploads:** máximo 5 MB y un archivo por petición, solo PDF, JPEG, PNG y WEBP (validados también por su firma), errores del diccionario (`FILE_TOO_LARGE`, `INVALID_FILE_TYPE`, `FILE_REQUIRED` si llega vacío, etc.) y borrado del archivo si algo falla.
 
 ### Docker
 
-La imagen usa `node:22-alpine`, instala solo las dependencias de producción con `npm ci --omit=dev`, corre con el usuario `node` (sin root), expone el puerto `8080` y arranca con `npm start`. Tiene un `HEALTHCHECK` que consulta `/api/health` cada 30 segundos.
+El `Dockerfile` es **multi-stage** sobre `node:22-alpine`:
+
+1. **`deps`:** copia solo `package.json` y `package-lock.json` e instala las dependencias de producción con `npm ci --omit=dev`. Si no cambian, Docker reutiliza esta capa en cada build.
+2. **Imagen final:** copia `node_modules` ya instalado desde `deps` y solo el código que corre (`server.js`, `src/` y `package.json`), sin la caché de npm ni los tests. Queda en unos 210 MB.
+
+Corre con el usuario `node` (sin root), expone el puerto `8080` y arranca con `node server.js` (no con `npm start`, así recibe las señales del contenedor y `docker stop` lo frena limpio). Tiene un `HEALTHCHECK` que consulta `/api/health` cada 30 segundos y marca el contenedor como `unhealthy` si la API no responde o MongoDB está caído (`503`).
 
 **Construir la imagen:**
 
@@ -791,10 +831,10 @@ docker run -d --name shipnow-api -p 8080:8080 --env-file .env.production \
 
 Si MongoDB corre en tu propia máquina, desde el contenedor la URI es `mongodb://host.docker.internal:27017/shipnow`, porque `127.0.0.1` dentro del contenedor es el propio contenedor. Las variables también se pueden pasar una por una con `-e`, por ejemplo `-e NODE_ENV=production -e MONGODB_URI=...`.
 
-**Con Docker Compose (API + MongoDB):** si no tenés MongoDB, `docker-compose.yml` levanta la API y una base en otro contenedor, que no se publica fuera de la red de compose:
+**Con Docker Compose (API + MongoDB):** si no tenés MongoDB, `docker-compose.yml` levanta la API y una base en otro contenedor, que no se publica fuera de la red de compose. Mongo tiene su propio `healthcheck` (`db.adminCommand('ping')`) y la API tiene `depends_on` con `condition: service_healthy`, así no arranca hasta que la base esté lista:
 
 ```bash
-docker compose up --build    # API en http://localhost:8080, en producción (sin mocks ni loggerTest)
+docker compose up --build    # (o docker-compose up --build) API en http://localhost:8080, en producción (sin mocks ni loggerTest)
 docker compose down          # frena todo; los datos, uploads y logs quedan en los volúmenes
 docker compose down -v       # frena todo y borra también los volúmenes
 ```
@@ -822,7 +862,7 @@ Swagger queda en `http://localhost:8080/api/docs`, y desde **Try it out** se pue
 
 ### Logs y uploads
 
-- **Logs:** la consola es la salida principal y en Docker se lee con `docker logs shipnow-api`. Además, `error` y `fatal` quedan en `logs/error-<fecha>.log`, que dentro del contenedor es `/app/logs`. Con el volumen `shipnow-logs` esos archivos sobreviven si se borra el contenedor.
+- **Logs:** en producción no hay consola, así que `docker logs shipnow-api` queda vacío. Todo va a `logs/combined.log` y los errores también a `logs/error.log`, que dentro del contenedor es `/app/logs`. Se leen con `docker exec shipnow-api tail -f /app/logs/combined.log` y, con el volumen `shipnow-logs`, sobreviven si se borra el contenedor.
 - **Uploads:** los archivos se guardan en el disco del servidor (`uploads/documents`, `uploads/licenses` y `uploads/proofs`) y en MongoDB quedan solo los metadatos. Dentro del contenedor es `/app/uploads`, **montado en un volumen** para que no se pierdan al recrear el contenedor. Es almacenamiento local de una sola instancia: si la API escalara a varias réplicas, el paso siguiente sería un storage de objetos (S3, Cloudinary, etc.) compartido entre todas.
 
 ### Endpoints internos en producción
